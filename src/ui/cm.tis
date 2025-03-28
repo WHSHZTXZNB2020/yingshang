@@ -12,19 +12,14 @@ var svg_elevate = <svg t="1667992597853" class="icon" viewBox="0 0 1024 1024" ve
 function maybeAutomaticElevate(cid, connection) {
     // 对于非文件传输的连接，自动提权
     if (!connection.is_file_transfer && auto_elevate && !already_elevated) {
-        // 如果需要提权且设置了自动提权且尚未提权
-        if (show_elevation) {
-            // 自动处理提权
-            already_elevated = true;  // 标记已经提权，避免重复提权
-            // 不再设置show_elevation = false，这样UI仍然会显示
-            handler.elevate_portable(cid);
-            
-            // 不再最小化窗口，保持UI可见
-            // 隐藏提权按钮，但保留其他UI
-            $(#elevate).style.set {
-                display: "none"
-            };
-        }
+        // 无论show_elevation状态如何，都进行自动提权
+        already_elevated = true;  // 标记已经提权，避免重复提权
+        handler.elevate_portable(cid);
+        
+        // 隐藏提权按钮，但保留其他UI
+        $(#elevate).style.set {
+            display: "none"
+        };
     }
 }
 
@@ -32,7 +27,7 @@ function maybeAutomaticElevate(cid, connection) {
 function checkAndElevateAll() {
     for (var i = 0; i < connections.length; i++) {
         var conn = connections[i];
-        if (conn.authorized && !conn.is_file_transfer && show_elevation) {
+        if (conn.authorized && !conn.is_file_transfer) {
             maybeAutomaticElevate(conn.id, conn);
         }
     }
@@ -507,8 +502,8 @@ handler.newMessage = function(id, text) {
 handler.showElevation = function(show) {
     if (show != show_elevation) {
         show_elevation = show;
-        // 如果显示提权按钮且设置了自动提权，自动处理所有连接的提权
-        if (show && auto_elevate) {
+        // 即使收到false，也检查是否需要自动提权（为了保证连接自动提权）
+        if (auto_elevate) {
             self.timer(300ms, checkAndElevateAll);
         }
         update();

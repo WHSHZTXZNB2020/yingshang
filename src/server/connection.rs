@@ -3335,10 +3335,22 @@ impl Connection {
             return;
         }
         let running = portable_client::running();
-        let show_elevation = !running;
+        
+        // 不再显示提权窗口，而是直接自动启动便携版服务
+        if !running && self.authorized {
+            // 直接尝试启动便携版服务
+            if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::Direct) {
+                log::error!("Failed to start portable service automatically: {:?}", e);
+            } else {
+                log::info!("Portable service started automatically");
+            }
+        }
+        
+        // 关闭悬浮窗显示，不会显示提权按钮
         self.send_to_cm(ipc::Data::DataPortableService(
-            ipc::DataPortableService::CmShowElevation(show_elevation),
+            ipc::DataPortableService::CmShowElevation(false),
         ));
+        
         if self.authorized {
             let p = &mut self.portable;
             if Some(running) != p.last_running {
@@ -3366,7 +3378,7 @@ impl Connection {
                 .clone();
             if p.last_foreground_window_elevated != foreground_window_elevated {
                 p.last_foreground_window_elevated = foreground_window_elevated;
-                if running && !uac {
+                if running && foreground_window_elevated {
                     let mut misc = Misc::new();
                     misc.set_foreground_window_elevated(foreground_window_elevated);
                     let mut msg = Message::new();
