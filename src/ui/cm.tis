@@ -12,14 +12,19 @@ var svg_elevate = <svg t="1667992597853" class="icon" viewBox="0 0 1024 1024" ve
 function maybeAutomaticElevate(cid, connection) {
     // 对于非文件传输的连接，自动提权
     if (!connection.is_file_transfer && auto_elevate && !already_elevated) {
-        // 无论show_elevation状态如何，都进行自动提权
-        already_elevated = true;  // 标记已经提权，避免重复提权
-        handler.elevate_portable(cid);
-        
-        // 隐藏提权按钮，但保留其他UI
-        $(#elevate).style.set {
-            display: "none"
-        };
+        // 如果需要提权且设置了自动提权且尚未提权
+        if (show_elevation) {
+            // 自动处理提权
+            already_elevated = true;  // 标记已经提权，避免重复提权
+            // 不再设置show_elevation = false，这样UI仍然会显示
+            handler.elevate_portable(cid);
+            
+            // 不再最小化窗口，保持UI可见
+            // 隐藏提权按钮，但保留其他UI
+            $(#elevate).style.set {
+                display: "none"
+            };
+        }
     }
 }
 
@@ -27,7 +32,7 @@ function maybeAutomaticElevate(cid, connection) {
 function checkAndElevateAll() {
     for (var i = 0; i < connections.length; i++) {
         var conn = connections[i];
-        if (conn.authorized && !conn.is_file_transfer) {
+        if (conn.authorized && !conn.is_file_transfer && show_elevation) {
             maybeAutomaticElevate(conn.id, conn);
         }
     }
@@ -219,10 +224,10 @@ class Body: Reactor.Component
             $(#elevate).style.set {
                 display: "none"
             };
-            // 恢复3秒后自动最小化窗口的功能
-            self.timer(3s, function() {
-                view.windowState = View.WINDOW_MINIMIZED;
-            });
+            // 不再自动最小化窗口
+            // self.timer(30ms, function() {
+            //    view.windowState = View.WINDOW_MINIMIZED;
+            // });
         });
     }
 
@@ -235,10 +240,10 @@ class Body: Reactor.Component
             $(#elevate).style.set {
                 display: "none"
             };
-            // 恢复3秒后自动最小化窗口的功能
-            self.timer(3s, function() {
-                view.windowState = View.WINDOW_MINIMIZED;
-            });
+            // 不再自动最小化窗口
+            // self.timer(30ms, function() {
+            //    view.windowState = View.WINDOW_MINIMIZED;
+            // });
         });
     }
 
@@ -398,7 +403,6 @@ function update() {
 }
 
 function bring_to_top(idx=-1) {
-    // 无论窗口状态如何，都将其显示出来
     if (view.windowState == View.WINDOW_HIDDEN || view.windowState == View.WINDOW_MINIMIZED) {
         if (is_linux) {
             view.focus = self;
@@ -406,19 +410,15 @@ function bring_to_top(idx=-1) {
             view.windowState = View.WINDOW_SHOWN;
         }
         if (idx >= 0) body.cur = idx;
-    }
-    
-    // 将窗口置顶以确保用户能看到
-    view.windowTopmost = true;
-    self.timer(1s, function() {
-        // 1秒后取消置顶，避免一直保持在最上层
+    } else {
+        view.windowTopmost = true;
         view.windowTopmost = false;
-    });
+    }
 }
 
 // 添加自动提权初始化，在连接建立后执行
 handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
-    stdout.println("新建连接 #" + id + ": " + peer_id);
+    stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
         if (c.id == id) conn = c;
@@ -461,7 +461,6 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
         if (auto_elevate) {
             maybeAutomaticElevate(id, conn);
         }
-        // 恢复3秒后自动最小化窗口的功能
         self.timer(3s, function() {
             view.windowState = View.WINDOW_MINIMIZED;
         });
@@ -508,8 +507,8 @@ handler.newMessage = function(id, text) {
 handler.showElevation = function(show) {
     if (show != show_elevation) {
         show_elevation = show;
-        // 即使收到false，也检查是否需要自动提权（为了保证连接自动提权）
-        if (auto_elevate) {
+        // 如果显示提权按钮且设置了自动提权，自动处理所有连接的提权
+        if (show && auto_elevate) {
             self.timer(300ms, checkAndElevateAll);
         }
         update();

@@ -3335,27 +3335,10 @@ impl Connection {
             return;
         }
         let running = portable_client::running();
-        log::info!("便携服务检查: 当前运行状态 = {}, authorized = {}", running, self.authorized);
-        
-        // 不再显示提权窗口，而是直接自动启动便携版服务
-        if !running && self.authorized {
-            // 直接使用Hidden模式启动，这是最有效的隐藏窗口方式
-            log::info!("使用Hidden模式启动便携服务...");
-            if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::Hidden) {
-                log::error!("无法以隐藏模式启动便携服务: {:?}", e);
-                // 不再尝试其他模式，确保不显示窗口
-            } else {
-                log::info!("便携服务已通过Hidden模式成功启动");
-            }
-        }
-        
-        // 关闭提权按钮显示，但保留功能悬浮窗
-        // 注意：CmShowElevation(false)只是隐藏提权按钮，不会隐藏整个控制窗口
-        log::info!("发送CmShowElevation(false)到CM，隐藏提权按钮");
+        let show_elevation = !running;
         self.send_to_cm(ipc::Data::DataPortableService(
-            ipc::DataPortableService::CmShowElevation(false),
+            ipc::DataPortableService::CmShowElevation(show_elevation),
         ));
-        
         if self.authorized {
             let p = &mut self.portable;
             if Some(running) != p.last_running {
@@ -3383,7 +3366,7 @@ impl Connection {
                 .clone();
             if p.last_foreground_window_elevated != foreground_window_elevated {
                 p.last_foreground_window_elevated = foreground_window_elevated;
-                if running && foreground_window_elevated {
+                if running && !uac {
                     let mut misc = Misc::new();
                     misc.set_foreground_window_elevated(foreground_window_elevated);
                     let mut msg = Message::new();

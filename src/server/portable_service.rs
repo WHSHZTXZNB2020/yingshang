@@ -605,34 +605,12 @@ pub mod client {
             StartPara::Hidden => {
                 #[cfg(target_os = "windows")]
                 {
-                    // 使用CreateProcess API启动进程，设置窗口状态为隐藏
-                    // 使用完整路径启动，避免重复显示
-                    let exe_path = std::env::current_exe()?.to_string_lossy().to_string();
-                    log::info!("启动隐藏模式便携服务: {}", exe_path);
-                    
-                    // 为子进程设置环境变量，确保不显示UI
-                    std::env::set_var("RUSTDESK_PORTABLE_SERVICE_HIDDEN", "1");
-                    
-                    // 使用更严格的隐藏窗口参数启动进程
-                    use std::os::windows::process::CommandExt;
-                    use std::process::Command;
-                    use winapi::um::winbase::CREATE_NO_WINDOW;
-                    
-                    // 使用CREATE_NO_WINDOW标志启动进程
-                    let mut cmd = Command::new(&exe_path);
-                    cmd.arg("--portable-service-hidden")
-                       .creation_flags(CREATE_NO_WINDOW)
-                       .env("RUSTDESK_PORTABLE_SERVICE_HIDDEN", "1");
-                    
-                    match cmd.spawn() {
-                        Ok(_) => {
-                            log::info!("成功以隐藏模式启动便携服务");
-                        }
-                        Err(e) => {
-                            log::error!("无法以隐藏模式启动便携服务进程: {}", e);
-                            *SHMEM.lock().unwrap() = None;
-                            bail!("Failed to run hidden portable service process: {}", e);
-                        }
+                    if let Err(e) = crate::platform::run_background(
+                        &std::env::current_exe()?.to_string_lossy().to_string(),
+                        "--portable-service-hidden",
+                    ) {
+                        *SHMEM.lock().unwrap() = None;
+                        bail!("Failed to run hidden portable service process: {}", e);
                     }
                 }
                 #[cfg(not(target_os = "windows"))]

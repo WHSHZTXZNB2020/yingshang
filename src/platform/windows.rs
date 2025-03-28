@@ -2744,31 +2744,14 @@ pub mod reg_display_settings {
 }
 
 pub fn hide_current_window() {
-    use winapi::um::winuser::{EnumWindows, GetWindowThreadProcessId, ShowWindow, GetForegroundWindow};
-    use winapi::um::winuser::{SW_HIDE};
-    use std::ptr;
-
+    use winapi::um::winuser::GetForegroundWindow;
+    use winapi::um::winuser::ShowWindow;
+    use winapi::um::winuser::SW_HIDE;
+    
     unsafe {
-        // 首先隐藏当前最前端窗口
         let hwnd = GetForegroundWindow();
         if !hwnd.is_null() {
             ShowWindow(hwnd, SW_HIDE);
         }
-        
-        // 查找并隐藏当前进程的所有窗口
-        let current_pid = GetCurrentProcessId();
-        
-        extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-            unsafe {
-                let mut pid: DWORD = 0;
-                GetWindowThreadProcessId(hwnd, &mut pid);
-                if pid == lparam as DWORD {
-                    ShowWindow(hwnd, SW_HIDE);
-                }
-                TRUE
-            }
-        }
-        
-        EnumWindows(Some(enum_windows_callback), current_pid as LPARAM);
     }
 }
