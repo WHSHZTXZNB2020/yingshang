@@ -1052,7 +1052,7 @@ pub fn elevate_portable(_id: i32) {
         let lock = CLIENTS.read().unwrap();
         if let Some(s) = lock.get(&_id) {
             allow_err!(s.tx.send(ipc::Data::DataPortableService(
-                ipc::Data::DataPortableService::RequestSilentStart
+                ipc::DataPortableService::RequestSilentStart
             )));
         }
     }
