@@ -1717,7 +1717,7 @@ pub fn run_background(exe: &str, arg: &str) -> ResultType<bool> {
     }
 }
 
-pub fn run_uac(exe: &str, arg: &str, show_window: bool) -> ResultType<bool> {
+pub fn run_uac(exe: &str, arg: &str) -> ResultType<bool> {
     let wop = wide_string("runas");
     let wexe = wide_string(exe);
     let warg;
@@ -1733,7 +1733,7 @@ pub fn run_uac(exe: &str, arg: &str, show_window: bool) -> ResultType<bool> {
                 warg.as_ptr() as _
             },
             NULL as _,
-            if show_window { SW_SHOWNORMAL } else { SW_HIDE },
+            SW_SHOWNORMAL,
         );
         return Ok(ret as i32 > 32);
     }
@@ -1746,7 +1746,6 @@ pub fn check_super_user_permission() -> ResultType<bool> {
             .to_string()
             .as_str(),
         "--version",
-        true,  // 验证权限时显示窗口
     )
 }
 
@@ -1757,19 +1756,6 @@ pub fn elevate(arg: &str) -> ResultType<bool> {
             .to_string()
             .as_str(),
         arg,
-        true,  // 默认显示窗口
-    )
-}
-
-// 新增加一个不显示窗口的自动提权函数
-pub fn elevate_silent(arg: &str) -> ResultType<bool> {
-    run_uac(
-        std::env::current_exe()?
-            .to_string_lossy()
-            .to_string()
-            .as_str(),
-        arg,
-        false,  // 不显示窗口
     )
 }
 
@@ -2739,19 +2725,6 @@ pub mod reg_display_settings {
             10 => RegType::REG_RESOURCE_REQUIREMENTS_LIST,
             11 => RegType::REG_QWORD,
             _ => RegType::REG_NONE,
-        }
-    }
-}
-
-pub fn hide_current_window() {
-    use winapi::um::winuser::GetForegroundWindow;
-    use winapi::um::winuser::ShowWindow;
-    use winapi::um::winuser::SW_HIDE;
-    
-    unsafe {
-        let hwnd = GetForegroundWindow();
-        if !hwnd.is_null() {
-            ShowWindow(hwnd, SW_HIDE);
         }
     }
 }

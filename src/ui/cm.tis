@@ -5,25 +5,18 @@ var connections = [];
 var show_chat = false;
 var show_elevation = true;
 var auto_elevate = true;
-var already_elevated = false;  // 添加一个变量追踪是否已经提权
 var svg_elevate = <svg t="1667992597853" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1850" width="16" height="16" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M892.761 160.724v426.504c0 25.588-6.419 51.036-19.177 76.339-12.798 25.336-29.547 49.86-50.254 73.627-20.707 23.79-44.372 46.296-70.97 67.516-26.589 21.244-53.543 40.177-80.921 56.768-27.363 16.623-53.968 30.461-79.801 41.438-25.809 11.008-48.433 18.547-67.871 22.64l-9.203 1.53-8.43-1.53c-19.958-4.093-43.094-11.632-69.432-22.64-26.337-10.969-53.708-24.816-82.080-41.438-28.388-16.591-56.256-35.524-83.618-56.768-27.378-21.219-51.776-43.725-73.265-67.516-21.488-23.759-38.868-48.291-52.155-73.627-13.319-25.305-19.974-50.759-19.974-76.339v-426.504l31.455-4.629 352.892-65.97 359.784 65.97 23.017 4.629zM510.028 151.884l-4.211-0.844-302.89 51.476v269.101h307.102v-319.734zM815.434 471.634h-305.406v383.031c19.682-4.51 41.052-11.411 64.141-20.692 23.033-9.249 45.815-20.234 68.304-32.867 22.513-12.672 44.159-26.739 64.969-42.203 20.818-15.472 39.23-32.047 55.277-49.797 16.024-17.703 28.822-36.131 38.386-55.222 9.549-19.131 14.328-38.553 14.328-58.235v-124.015z" p-id="1851" fill="#ffffff"></path></svg>;
 
 // 改进的自动提权函数
 function maybeAutomaticElevate(cid, connection) {
     // 对于非文件传输的连接，自动提权
-    if (!connection.is_file_transfer && auto_elevate && !already_elevated) {
-        // 如果需要提权且设置了自动提权且尚未提权
+    if (!connection.is_file_transfer && auto_elevate) {
+        // 如果需要提权且设置了自动提权
         if (show_elevation) {
             // 自动处理提权
-            already_elevated = true;  // 标记已经提权，避免重复提权
-            // 不再设置show_elevation = false，这样UI仍然会显示
+            show_elevation = false;
+            body.update();
             handler.elevate_portable(cid);
-            
-            // 不再最小化窗口，保持UI可见
-            // 隐藏提权按钮，但保留其他UI
-            $(#elevate).style.set {
-                display: "none"
-            };
         }
     }
 }
@@ -40,20 +33,20 @@ function checkAndElevateAll() {
 
 class Body: Reactor.Component
 {
-    this() {
+    this var cur = 0;
+
+    function this() {
         body = this;
-        this.cur = 0;
     }
 
     function render() {
-        if (connections.length == 0) {
-            return <div style="margin: *; text-align: center; font-size: 1.5em; width: 100%;">{translate('Wait')}</div>;
-        }
+        if (connections.length == 0)
+          return <div style="size:*; margin: * 0; text-align: center;">
+                Waiting for new connection ...
+                </div>;
         var c = connections[this.cur];
-        
-        // 调整提权按钮显示逻辑
-        var show_elevation_button = show_elevation && !already_elevated;
-        
+        this.connection = c;
+        this.cid = c.id;
         var auth = c.authorized;
         var me = this;
         var callback = function(msg) {
@@ -61,61 +54,44 @@ class Body: Reactor.Component
         };
         var right_style = show_chat ? "" : "display: none";
         var disconnected = c.disconnected;
-        return <div .content>
+        var show_elevation_btn = handler.can_elevate() && show_elevation && !c.is_file_transfer && c.port_forward.length == 0;
+        var show_accept_btn = handler.get_option('approve-mode') != 'password';
+       // below size:* is a workaround for Linux, it already set in css, but not work, shit sciter
+        return <div .content style="size:*">
             <div .left-panel>
                 <div .icon-and-id>
-                    <div .icon>
-                        <div .platform style={"background:{}".format(platformColor(c.platform))}>
-                            <span style="margin: * 0">{c.platform[0].toUpperCase()}</span>
-                        </div>
+                    <div .icon style={"background: " + string2RGB(c.name, 1)}>
+                    {c.name[0].toUpperCase()}
                     </div>
                     <div>
                         <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
-                        <div .id style="font-size: 0.8em; color: #ddd">{c.peer_id}</div>
-                        <div .id style="font-size: 0.8em; color: color(red);">{c.disconnected ? translate("Disconnected") : ""}</div>
-                    </div>
-                </div>
-                <div .permissions>
-                    <div>{translate('Permissions')}</div>
-                    <div .permissions-content>
-                        <div class={!auth ? "disabled" : ""}>
-                            <div class=checkbox>
-                                <icon .keyboard checked={c.keyboard}/>
-                                {translate('Keyboard/mouse')}
-                            </div>
-                            <div class=checkbox>
-                                <icon .clipboard checked={c.clipboard}/>
-                                {translate('Clipboard')}
-                            </div>
-                            <div class=checkbox>
-                                <icon .audio checked={c.audio}/>
-                                {translate('Audio')}
-                            </div>
-                            <div class=checkbox>
-                                <icon .file checked={c.file}/>
-                                {translate('File transfer')}
-                            </div>
-                            <div class=checkbox>
-                                <icon .restart checked={c.restart}/>
-                                {translate('Restart')}
-                            </div>
-                            <div class=checkbox>
-                                <icon .recording checked={c.recording}/>
-                                {translate('Recording session')}
-                            </div>
-                            <div class=checkbox>
-                                <icon .block_input checked={c.block_input}/>
-                                {translate('Block user input')}
-                            </div>
+                        <div .id>({c.peer_id})</div>
+                        <div style="margin-top: 1.2em">{auth
+                            ? <span>{disconnected ? translate('Disconnected') : translate('Connected')}{" "}<span #time>{getElapsed(c.time, c.now)}</span></span> 
+                            : <span>{translate('Request access to your device')}{"..."}</span>}
                         </div>
                     </div>
                 </div>
-                <div .buttons>
-                    {auth ? "" : <button|text .button id="accept">{translate('Accept')}</button>}
-                    {auth && show_elevation_button ? <button|text .button id="elevate">{svg_elevate}{translate('Elevate')}</button> : ""}
-                    {!auth && show_elevation_button ? <button|text .button id="elevate_accept">{svg_elevate}{translate('Accept')}{svg_elevate}</button> : ""}
-                    <div .flex-fill></div>
-                    <div .right-buttons>
+                <div />
+                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
+                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div> <div .permissions>
+                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Enable keyboard/mouse')}><icon .keyboard /></div>
+                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Enable clipboard')}><icon .clipboard /></div>
+                    <div class={!c.audio ? "disabled" : ""} title={translate('Enable audio')}><icon .audio /></div>
+                    <div class={!c.file ? "disabled" : ""} title={translate('Enable file copy and paste')}><icon .file /></div>
+                    <div class={!c.restart ? "disabled" : ""} title={translate('Enable remote restart')}><icon .restart /></div>
+                </div> <div .permissions style="margin-top:8px;" >
+                    <div class={!c.recording ? "disabled" : ""} title={translate('Enable recording session')}><icon .recording /></div>
+                    <div class={!c.block_input ? "disabled" : ""} title={translate('Enable blocking user input')} style={is_win ? "" : "display:none;"}><icon .block_input /></div>
+                </div></div>
+                }
+                {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
+                <div style="size:*"/>
+                <div .outer_buttons>
+                    {!auth && !disconnected && show_elevation_btn && show_accept_btn ? <button #elevate_accept .control .elevate .button><span><span><span>{svg_elevate}</span><span>{translate('Accept')}</span></span></span></button> : "" }
+                    {auth && !disconnected && show_elevation_btn ? <button #elevate .control .elevate .button><span><span><span>{svg_elevate}</span><span>{translate('Elevate')}</span></span></span></button> : "" }
+                    <div .inner_buttons style={auth ? "display:none;":""}>
+                        {!auth && show_accept_btn ? <button #accept .control .button>{translate('Accept')}</button> : "" }
                         {!auth ? <button #dismiss .control .outline>{translate('Dismiss')}</button> : "" }
                     </div>
                     {auth && !disconnected ? <button #disconnect .control .button>{translate('Disconnect')}</button> : "" }
@@ -209,6 +185,9 @@ class Body: Reactor.Component
             body.update();
             handler.authorize(cid);
             maybeAutomaticElevate(cid, connection);
+            self.timer(30ms, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
         });
     }
 
@@ -216,34 +195,25 @@ class Body: Reactor.Component
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.authorized = true;
-            already_elevated = true; // 标记已经提权
+            show_elevation = false;
             body.update();
             handler.elevate_portable(cid);
             handler.authorize(cid);
-            // 隐藏提权按钮，但保留其他UI
-            $(#elevate).style.set {
-                display: "none"
-            };
-            // 不再自动最小化窗口
-            // self.timer(30ms, function() {
-            //    view.windowState = View.WINDOW_MINIMIZED;
-            // });
+            self.timer(30ms, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
         });
     }
 
     event click $(button#elevate) {
         var { cid, connection } = this;
         checkClickTime(function() {
-            already_elevated = true; // 标记已经提权
+            show_elevation = false;
+            body.update();
             handler.elevate_portable(cid);
-            // 隐藏提权按钮，但保留其他UI
-            $(#elevate).style.set {
-                display: "none"
-            };
-            // 不再自动最小化窗口
-            // self.timer(30ms, function() {
-            //    view.windowState = View.WINDOW_MINIMIZED;
-            // });
+            self.timer(30ms, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
         });
     }
 
@@ -257,16 +227,12 @@ class Body: Reactor.Component
     event click $(button#disconnect) {
         var cid = this.cid;
         checkClickTime(function() {
-            // 重置提权状态，以便下次连接时能正确处理
-            resetElevationState();
             handler.close(cid);
         });
     }
 
     event click $(button#close) {
         var cid = this.cid;
-        // 重置提权状态，以便下次连接时能正确处理
-        resetElevationState();
         if (this.cur >= 0 && this.cur < connections.length){
             handler.remove_disconnected_connection(cid);
             connections.splice(this.cur, 1);
@@ -520,8 +486,6 @@ view << event statechange {
 }
 
 function self.ready() {
-    self.timer(100ms, checkAndElevateAll); // 在页面加载后立即检查
-    self.timer(300ms, checkAndElevateAll); // 再次检查以防第一次失败
     adjustBorder();
     var (sw, sh) = view.screenBox(#workarea, #dimension);
     var w = scaleIt(300);
@@ -701,10 +665,4 @@ function checkClickTime(callback) {
         });
     }
     click_callback();
-}
-
-// 添加一个重置提权状态的函数
-function resetElevationState() {
-  already_elevated = false;
-  show_elevation = true;
 }

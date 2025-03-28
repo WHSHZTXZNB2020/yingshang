@@ -533,9 +533,7 @@ pub mod client {
 
     pub enum StartPara {
         Direct,
-        DirectSilent,
         Logon(String, String),
-        Hidden,
     }
 
     pub(crate) fn start_portable_service(para: StartPara) -> ResultType<()> {
@@ -581,47 +579,6 @@ pub mod client {
                 ) {
                     *SHMEM.lock().unwrap() = None;
                     bail!("Failed to run portable service process: {}", e);
-                }
-            }
-            StartPara::DirectSilent => {
-                #[cfg(target_os = "windows")]
-                {
-                    if let Err(e) = crate::platform::windows::elevate_silent("--portable-service") {
-                        *SHMEM.lock().unwrap() = None;
-                        bail!("Failed to silently elevate portable service process: {}", e);
-                    }
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    if let Err(e) = crate::platform::run_background(
-                        &std::env::current_exe()?.to_string_lossy().to_string(),
-                        "--portable-service",
-                    ) {
-                        *SHMEM.lock().unwrap() = None;
-                        bail!("Failed to run portable service process: {}", e);
-                    }
-                }
-            }
-            StartPara::Hidden => {
-                #[cfg(target_os = "windows")]
-                {
-                    if let Err(e) = crate::platform::run_background(
-                        &std::env::current_exe()?.to_string_lossy().to_string(),
-                        "--portable-service-hidden",
-                    ) {
-                        *SHMEM.lock().unwrap() = None;
-                        bail!("Failed to run hidden portable service process: {}", e);
-                    }
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    if let Err(e) = crate::platform::run_background(
-                        &std::env::current_exe()?.to_string_lossy().to_string(),
-                        "--portable-service",
-                    ) {
-                        *SHMEM.lock().unwrap() = None;
-                        bail!("Failed to run portable service process: {}", e);
-                    }
                 }
             }
             StartPara::Logon(username, password) => {

@@ -600,18 +600,6 @@ impl Connection {
                                 log::error!("Failed to start portable service from cm: {:?}", e);
                             }
                         }
-                        #[cfg(windows)]
-                        ipc::Data::DataPortableService(ipc::DataPortableService::RequestSilentStart) => {
-                            if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::DirectSilent) {
-                                log::error!("Failed to silently start portable service from cm: {:?}", e);
-                            }
-                        }
-                        #[cfg(windows)]
-                        ipc::Data::DataPortableService(ipc::DataPortableService::RequestHiddenStart) => {
-                            if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::Hidden) {
-                                log::error!("Failed to start hidden portable service from cm: {:?}", e);
-                            }
-                        }
                         ipc::Data::SwitchSidesBack => {
                             let mut misc = Misc::new();
                             misc.set_switch_back(SwitchBack::default());
@@ -3330,7 +3318,6 @@ impl Connection {
             || self.file_transfer.is_some()
             || self.port_forward_socket.is_some()
             || !self.keyboard
-            || self.portable.last_running.is_some() // 如果已经检查过运行状态，不再继续
         {
             return;
         }
@@ -3366,7 +3353,7 @@ impl Connection {
                 .clone();
             if p.last_foreground_window_elevated != foreground_window_elevated {
                 p.last_foreground_window_elevated = foreground_window_elevated;
-                if running && !uac {
+                if !foreground_window_elevated || !running {
                     let mut misc = Misc::new();
                     misc.set_foreground_window_elevated(foreground_window_elevated);
                     let mut msg = Message::new();
