@@ -3338,11 +3338,17 @@ impl Connection {
         
         // 不再显示提权窗口，而是直接自动启动便携版服务
         if !running && self.authorized {
-            // 直接尝试启动便携版服务
-            if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::Direct) {
-                log::error!("Failed to start portable service automatically: {:?}", e);
+            // 使用DirectSilent模式启动，避免显示空白窗口
+            if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::DirectSilent) {
+                log::error!("Failed to start portable service silently: {:?}", e);
+                // 如果静默启动失败，尝试Hidden模式启动
+                if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::Hidden) {
+                    log::error!("Failed to start portable service in hidden mode: {:?}", e);
+                } else {
+                    log::info!("Portable service started in hidden mode");
+                }
             } else {
-                log::info!("Portable service started automatically");
+                log::info!("Portable service started silently");
             }
         }
         
