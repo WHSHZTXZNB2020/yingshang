@@ -224,6 +224,18 @@ fn ui() -> Result<(), nwg::NwgError> {
 }
 
 pub fn setup() {
+    // 检查环境变量，如果在隐藏模式下，不创建UI
+    if std::env::var("RUSTDESK_PORTABLE_SERVICE_HIDDEN").is_ok() {
+        return;
+    }
+    
+    // 检查命令行参数，如果包含隐藏相关的参数，不创建UI
+    let args: Vec<String> = std::env::args().collect();
+    if args.contains(&"--portable-service-hidden".to_string()) || 
+       args.contains(&"--portable-service".to_string()) {
+        return;
+    }
+    
     std::thread::spawn(move || {
         if let Err(e) = ui() {
             eprintln!("{:?}", e);

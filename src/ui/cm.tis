@@ -219,10 +219,10 @@ class Body: Reactor.Component
             $(#elevate).style.set {
                 display: "none"
             };
-            // 不再自动最小化窗口
-            // self.timer(30ms, function() {
-            //    view.windowState = View.WINDOW_MINIMIZED;
-            // });
+            // 恢复3秒后自动最小化窗口的功能
+            self.timer(3s, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
         });
     }
 
@@ -235,10 +235,10 @@ class Body: Reactor.Component
             $(#elevate).style.set {
                 display: "none"
             };
-            // 不再自动最小化窗口
-            // self.timer(30ms, function() {
-            //    view.windowState = View.WINDOW_MINIMIZED;
-            // });
+            // 恢复3秒后自动最小化窗口的功能
+            self.timer(3s, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
         });
     }
 
@@ -398,6 +398,7 @@ function update() {
 }
 
 function bring_to_top(idx=-1) {
+    // 无论窗口状态如何，都将其显示出来
     if (view.windowState == View.WINDOW_HIDDEN || view.windowState == View.WINDOW_MINIMIZED) {
         if (is_linux) {
             view.focus = self;
@@ -405,15 +406,19 @@ function bring_to_top(idx=-1) {
             view.windowState = View.WINDOW_SHOWN;
         }
         if (idx >= 0) body.cur = idx;
-    } else {
-        view.windowTopmost = true;
-        view.windowTopmost = false;
     }
+    
+    // 将窗口置顶以确保用户能看到
+    view.windowTopmost = true;
+    self.timer(1s, function() {
+        // 1秒后取消置顶，避免一直保持在最上层
+        view.windowTopmost = false;
+    });
 }
 
 // 添加自动提权初始化，在连接建立后执行
 handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
-    stdout.println("new connection #" + id + ": " + peer_id);
+    stdout.println("新建连接 #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
         if (c.id == id) conn = c;
@@ -456,6 +461,7 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
         if (auto_elevate) {
             maybeAutomaticElevate(id, conn);
         }
+        // 恢复3秒后自动最小化窗口的功能
         self.timer(3s, function() {
             view.windowState = View.WINDOW_MINIMIZED;
         });

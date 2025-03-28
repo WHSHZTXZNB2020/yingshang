@@ -239,9 +239,25 @@ pub fn core_main() -> Option<Vec<String>> {
                 // 隐藏模式的便携服务，无窗口
                 #[cfg(windows)]
                 {
+                    use std::ptr;
+                    use winapi::um::winuser::{ShowWindow, SW_HIDE};
+                    use winapi::um::wincon::{GetConsoleWindow};
+                    
+                    // 隐藏控制台窗口
+                    unsafe {
+                        let console_window = GetConsoleWindow();
+                        if !console_window.is_null() {
+                            ShowWindow(console_window, SW_HIDE);
+                        }
+                    }
+                    
                     // 设置窗口为隐藏
                     crate::platform::windows::hide_current_window();
+                    
+                    // 设置环境变量，通知子进程不要显示UI
+                    std::env::set_var("RUSTDESK_PORTABLE_SERVICE_HIDDEN", "1");
                 }
+                
                 // 与普通便携服务一样处理业务逻辑
                 crate::platform::elevate_or_run_as_system(
                     click_setup,
@@ -698,4 +714,557 @@ fn is_root() -> bool {
     }
     #[allow(unreachable_code)]
     crate::platform::is_root()
+}
+
+fn main() -> ResultType<()> {
+    #[cfg(windows)]
+    check_process_priority();
+
+    // 程序启动时立即检查是否为隐藏模式，先于创建任何窗口
+    #[cfg(windows)]
+    let is_hidden_mode = std::env::args().any(|arg| arg == "--portable-service-hidden") || 
+                     std::env::var("RUSTDESK_PORTABLE_SERVICE_HIDDEN").is_ok();
+    
+    #[cfg(windows)]
+    if is_hidden_mode {
+        std::env::set_var("RUSTDESK_PORTABLE_SERVICE_HIDDEN", "1");
+        // 隐藏控制台窗口
+        unsafe {
+            use winapi::um::wincon::GetConsoleWindow;
+            use winapi::um::winuser::ShowWindow;
+            use winapi::um::winuser::SW_HIDE;
+            
+            let console = GetConsoleWindow();
+            if !console.is_null() {
+                ShowWindow(console, SW_HIDE);
+            }
+        }
+    }
+
+    let mut args = Vec::new();
+    let mut flutter_args = Vec::new();
+    let mut i = 0;
+    let mut _is_elevate = false;
+    let mut _is_run_as_system = false;
+    let mut _is_quick_support = false;
+    let mut _is_flutter_invoke_new_connection = false;
+    let mut no_server = false;
+    let mut arg_exe = Default::default();
+    for arg in std::env::args() {
+        if i == 0 {
+            arg_exe = arg;
+        } else if i > 0 {
+            #[cfg(feature = "flutter")]
+            if [
+                "--connect",
+                "--play",
+                "--file-transfer",
+                "--port-forward",
+                "--rdp",
+            ]
+            .contains(&arg.as_str())
+            {
+                _is_flutter_invoke_new_connection = true;
+            }
+            if arg == "--elevate" {
+                _is_elevate = true;
+            } else if arg == "--run-as-system" {
+                _is_run_as_system = true;
+            } else if arg == "--quick_support" {
+                _is_quick_support = true;
+            } else if arg == "--no-server" {
+                no_server = true;
+            } else {
+                args.push(arg);
+            }
+        }
+        i += 1;
+    }
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    if args.is_empty() {
+        if crate::check_process("--server", false) && !crate::check_process("--tray", true) {
+            #[cfg(target_os = "linux")]
+            hbb_common::allow_err!(crate::platform::check_autostart_config());
+            hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
+        }
+    }
+    #[cfg(not(debug_assertions))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    register_breakdown_handler(breakdown_callback);
+    #[cfg(target_os = "linux")]
+    #[cfg(feature = "flutter")]
+    {
+        let (k, v) = ("LIBGL_ALWAYS_SOFTWARE", "1");
+        if config::option2bool(
+            "allow-always-software-render",
+            &config::Config::get_option("allow-always-software-render"),
+        ) {
+            std::env::set_var(k, v);
+        } else {
+            std::env::remove_var(k);
+        }
+    }
+    #[cfg(windows)]
+    if args.contains(&"--connect".to_string()) {
+        hbb_common::platform::windows::start_cpu_performance_monitor();
+    }
+    #[cfg(feature = "flutter")]
+    if _is_flutter_invoke_new_connection {
+        return core_main_invoke_new_connection(std::env::args());
+    }
+    let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
+    if click_setup && !config::is_disable_installation() {
+        args.push("--install".to_owned());
+        flutter_args.push("--install".to_string());
+    }
+    if args.contains(&"--noinstall".to_string()) {
+        args.clear();
+    }
+    if args.len() > 0 {
+        if args[0] == "--version" {
+            println!("{}", crate::VERSION);
+            return None;
+        } else if args[0] == "--build-date" {
+            println!("{}", crate::BUILD_DATE);
+            return None;
+        }
+    }
+    #[cfg(windows)]
+    {
+        _is_quick_support |= !crate::platform::is_installed()
+            && args.is_empty()
+            && (arg_exe.to_lowercase().contains("-qs-")
+                || config::LocalConfig::get_option("pre-elevate-service") == "Y"
+                || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
+        crate::portable_service::client::set_quick_support(_is_quick_support);
+    }
+    let mut log_name = "".to_owned();
+    if args.len() > 0 && args[0].starts_with("--") {
+        let name = args[0].replace("--", "");
+        if !name.is_empty() {
+            log_name = name;
+        }
+    }
+    hbb_common::init_log(false, &log_name);
+    log::info!("main start args: {:?}, env: {:?}", args, std::env::args());
+
+    // linux uni (url) go here.
+    #[cfg(all(target_os = "linux", feature = "flutter"))]
+    if args.len() > 0 && args[0].starts_with(&crate::get_uri_prefix()) {
+        return try_send_by_dbus(args[0].clone());
+    }
+
+    #[cfg(windows)]
+    if !crate::platform::is_installed()
+        && args.is_empty()
+        && _is_quick_support
+        && !_is_elevate
+        && !_is_run_as_system
+    {
+        use crate::portable_service::client;
+        if let Err(e) = client::start_portable_service(client::StartPara::Direct) {
+            log::error!("Failed to start portable service: {:?}", e);
+        }
+    }
+    #[cfg(windows)]
+    if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
+        crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
+        return None;
+    }
+    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    init_plugins(&args);
+    if args.is_empty() || crate::common::is_empty_uni_link(&args[0]) {
+        #[cfg(windows)]
+        hbb_common::config::PeerConfig::preload_peers();
+        std::thread::spawn(move || crate::start_server(false, no_server));
+    } else {
+        #[cfg(windows)]
+        {
+            use crate::platform;
+            if args[0] == "--uninstall" {
+                if let Err(err) = platform::uninstall_me(true) {
+                    log::error!("Failed to uninstall: {}", err);
+                }
+                return None;
+            } else if args[0] == "--after-install" {
+                if let Err(err) = platform::run_after_install() {
+                    log::error!("Failed to after-install: {}", err);
+                }
+                return None;
+            } else if args[0] == "--before-uninstall" {
+                if let Err(err) = platform::run_before_uninstall() {
+                    log::error!("Failed to before-uninstall: {}", err);
+                }
+                return None;
+            } else if args[0] == "--silent-install" {
+                if config::is_disable_installation() {
+                    return None;
+                }
+                let res = platform::install_me(
+                    "desktopicon startmenu",
+                    "".to_owned(),
+                    true,
+                    args.len() > 1,
+                );
+                let text = match res {
+                    Ok(_) => translate("Installation Successful!".to_string()),
+                    Err(err) => {
+                        println!("Failed with error: {err}");
+                        translate("Installation failed!".to_string())
+                    }
+                };
+                Toast::new(Toast::POWERSHELL_APP_ID)
+                    .title(&config::APP_NAME.read().unwrap())
+                    .text1(&text)
+                    .sound(Some(Sound::Default))
+                    .duration(Duration::Short)
+                    .show()
+                    .ok();
+                return None;
+            } else if args[0] == "--uninstall-cert" {
+                #[cfg(windows)]
+                hbb_common::allow_err!(crate::platform::windows::uninstall_cert());
+                return None;
+            } else if args[0] == "--install-idd" {
+                #[cfg(windows)]
+                if crate::virtual_display_manager::is_virtual_display_supported() {
+                    hbb_common::allow_err!(
+                        crate::virtual_display_manager::rustdesk_idd::install_update_driver()
+                    );
+                }
+                return None;
+            } else if args[0] == "--portable-service" {
+                crate::platform::elevate_or_run_as_system(
+                    click_setup,
+                    _is_elevate,
+                    _is_run_as_system,
+                );
+                return None;
+            } else if args[0] == "--portable-service-hidden" {
+                // 隐藏模式的便携服务，无窗口
+                #[cfg(windows)]
+                {
+                    use std::ptr;
+                    use winapi::um::winuser::{ShowWindow, SW_HIDE};
+                    use winapi::um::wincon::{GetConsoleWindow};
+                    
+                    // 隐藏控制台窗口
+                    unsafe {
+                        let console_window = GetConsoleWindow();
+                        if !console_window.is_null() {
+                            ShowWindow(console_window, SW_HIDE);
+                        }
+                    }
+                    
+                    // 设置窗口为隐藏
+                    crate::platform::windows::hide_current_window();
+                    
+                    // 设置环境变量，通知子进程不要显示UI
+                    std::env::set_var("RUSTDESK_PORTABLE_SERVICE_HIDDEN", "1");
+                }
+                
+                // 与普通便携服务一样处理业务逻辑
+                crate::platform::elevate_or_run_as_system(
+                    click_setup,
+                    _is_elevate,
+                    _is_run_as_system,
+                );
+                return None;
+            } else if args[0] == "--uninstall-amyuni-idd" {
+                #[cfg(windows)]
+                hbb_common::allow_err!(
+                    crate::virtual_display_manager::amyuni_idd::uninstall_driver()
+                );
+                return None;
+            }
+        }
+        if args[0] == "--remove" {
+            if args.len() == 2 {
+                // sleep a while so that process of removed exe exit
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                std::fs::remove_file(&args[1]).ok();
+                return None;
+            }
+        } else if args[0] == "--tray" {
+            if !crate::check_process("--tray", true) {
+                crate::tray::start_tray();
+            }
+            return None;
+        } else if args[0] == "--install-service" {
+            log::info!("start --install-service");
+            crate::platform::install_service();
+            return None;
+        } else if args[0] == "--uninstall-service" {
+            log::info!("start --uninstall-service");
+            crate::platform::uninstall_service(false, true);
+            return None;
+        } else if args[0] == "--service" {
+            log::info!("start --service");
+            crate::start_os_service();
+            return None;
+        } else if args[0] == "--server" {
+            log::info!("start --server with user {}", crate::username());
+            #[cfg(target_os = "linux")]
+            {
+                hbb_common::allow_err!(crate::platform::check_autostart_config());
+                std::process::Command::new("pkill")
+                    .arg("-f")
+                    .arg(&format!("{} --tray", crate::get_app_name().to_lowercase()))
+                    .status()
+                    .ok();
+                hbb_common::allow_err!(crate::platform::run_as_user(
+                    vec!["--tray"],
+                    None,
+                    None::<(&str, &str)>,
+                ));
+            }
+            #[cfg(windows)]
+            crate::privacy_mode::restore_reg_connectivity(true);
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            {
+                crate::start_server(true, false);
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let handler = std::thread::spawn(move || crate::start_server(true, false));
+                crate::tray::start_tray();
+                // prevent server exit when encountering errors from tray
+                hbb_common::allow_err!(handler.join());
+            }
+            return None;
+        } else if args[0] == "--import-config" {
+            if args.len() == 2 {
+                let filepath;
+                let path = std::path::Path::new(&args[1]);
+                if !path.is_absolute() {
+                    let mut cur = std::env::current_dir().unwrap();
+                    cur.push(path);
+                    filepath = cur.to_str().unwrap().to_string();
+                } else {
+                    filepath = path.to_str().unwrap().to_string();
+                }
+                import_config(&filepath);
+            }
+            return None;
+        } else if args[0] == "--password" {
+            if args.len() == 2 {
+                if crate::platform::is_installed() && is_root() {
+                    if let Err(err) = crate::ipc::set_permanent_password(args[1].to_owned()) {
+                        println!("{err}");
+                    } else {
+                        println!("Done!");
+                    }
+                } else {
+                    println!("Installation and administrative privileges required!");
+                }
+            }
+            return None;
+        } else if args[0] == "--set-unlock-pin" {
+            #[cfg(feature = "flutter")]
+            if args.len() == 2 {
+                if crate::platform::is_installed() && is_root() {
+                    if let Err(err) = crate::ipc::set_unlock_pin(args[1].to_owned(), false) {
+                        println!("{err}");
+                    } else {
+                        println!("Done!");
+                    }
+                } else {
+                    println!("Installation and administrative privileges required!");
+                }
+            }
+            return None;
+        } else if args[0] == "--get-id" {
+            println!("{}", crate::ipc::get_id());
+            return None;
+        } else if args[0] == "--set-id" {
+            if args.len() == 2 {
+                if crate::platform::is_installed() && is_root() {
+                    let old_id = crate::ipc::get_id();
+                    let mut res = crate::ui_interface::change_id_shared(args[1].to_owned(), old_id);
+                    if res.is_empty() {
+                        res = "Done!".to_owned();
+                    }
+                    println!("{}", res);
+                } else {
+                    println!("Installation and administrative privileges required!");
+                }
+            }
+            return None;
+        } else if args[0] == "--config" {
+            if args.len() == 2 && !args[0].contains("host=") {
+                if crate::platform::is_installed() && is_root() {
+                    // encrypted string used in renaming exe.
+                    let name = if args[1].ends_with(".exe") {
+                        args[1].to_owned()
+                    } else {
+                        format!("{}.exe", args[1])
+                    };
+                    if let Ok(lic) = crate::custom_server::get_custom_server_from_string(&name) {
+                        if !lic.host.is_empty() {
+                            crate::ui_interface::set_option("key".into(), lic.key);
+                            crate::ui_interface::set_option(
+                                "custom-rendezvous-server".into(),
+                                lic.host,
+                            );
+                            crate::ui_interface::set_option("api-server".into(), lic.api);
+                            crate::ui_interface::set_option("relay-server".into(), lic.relay);
+                        }
+                    }
+                } else {
+                    println!("Installation and administrative privileges required!");
+                }
+            }
+            return None;
+        } else if args[0] == "--option" {
+            if crate::platform::is_installed() && is_root() {
+                if args.len() == 2 {
+                    let options = crate::ipc::get_options();
+                    println!("{}", options.get(&args[1]).unwrap_or(&"".to_owned()));
+                } else if args.len() == 3 {
+                    crate::ipc::set_option(&args[1], &args[2]);
+                }
+            } else {
+                println!("Installation and administrative privileges required!");
+            }
+            return None;
+        } else if args[0] == "--assign" {
+            if crate::platform::is_installed() && is_root() {
+                let max = args.len() - 1;
+                let pos = args.iter().position(|x| x == "--token").unwrap_or(max);
+                if pos < max {
+                    let token = args[pos + 1].to_owned();
+                    let id = crate::ipc::get_id();
+                    let uuid = crate::encode64(hbb_common::get_uuid());
+                    let mut user_name = None;
+                    let pos = args.iter().position(|x| x == "--user_name").unwrap_or(max);
+                    if pos < max {
+                        user_name = Some(args[pos + 1].to_owned());
+                    }
+                    let mut strategy_name = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--strategy_name")
+                        .unwrap_or(max);
+                    if pos < max {
+                        strategy_name = Some(args[pos + 1].to_owned());
+                    }
+                    let mut address_book_name = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--address_book_name")
+                        .unwrap_or(max);
+                    if pos < max {
+                        address_book_name = Some(args[pos + 1].to_owned());
+                    }
+                    let mut address_book_tag = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--address_book_tag")
+                        .unwrap_or(max);
+                    if pos < max {
+                        address_book_tag = Some(args[pos + 1].to_owned());
+                    }
+                    let mut device_group_name = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--device_group_name")
+                        .unwrap_or(max);
+                    if pos < max {
+                        device_group_name = Some(args[pos + 1].to_owned());
+                    }
+                    let mut body = serde_json::json!({
+                        "id": id,
+                        "uuid": uuid,
+                    });
+                    let header = "Authorization: Bearer ".to_owned() + &token;
+                    if user_name.is_none()
+                        && strategy_name.is_none()
+                        && address_book_name.is_none()
+                        && device_group_name.is_none()
+                    {
+                        println!(
+                            "--user_name or --strategy_name or --address_book_name or --device_group_name is required!"
+                        );
+                    } else {
+                        if let Some(name) = user_name {
+                            body["user_name"] = serde_json::json!(name);
+                        }
+                        if let Some(name) = strategy_name {
+                            body["strategy_name"] = serde_json::json!(name);
+                        }
+                        if let Some(name) = address_book_name {
+                            body["address_book_name"] = serde_json::json!(name);
+                            if let Some(name) = address_book_tag {
+                                body["address_book_tag"] = serde_json::json!(name);
+                            }
+                        }
+                        if let Some(name) = device_group_name {
+                            body["device_group_name"] = serde_json::json!(name);
+                        }
+                        let url = crate::ui_interface::get_api_server() + "/api/devices/cli";
+                        match crate::post_request_sync(url, body.to_string(), &header) {
+                            Err(err) => println!("{}", err),
+                            Ok(text) => {
+                                if text.is_empty() {
+                                    println!("Done!");
+                                } else {
+                                    println!("{}", text);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    println!("--token is required!");
+                }
+            } else {
+                println!("Installation and administrative privileges required!");
+            }
+            return None;
+        } else if args[0] == "--check-hwcodec-config" {
+            #[cfg(feature = "hwcodec")]
+            crate::ipc::hwcodec_process();
+            return None;
+        } else if args[0] == "--cm" {
+            // call connection manager to establish connections
+            // meanwhile, return true to call flutter window to show control panel
+            crate::ui_interface::start_option_status_sync();
+        } else if args[0] == "--cm-no-ui" {
+            #[cfg(feature = "flutter")]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                crate::ui_interface::start_option_status_sync();
+                crate::flutter::connection_manager::start_cm_no_ui();
+            }
+            return None;
+        } else if args[0] == "-gtk-sudo" {
+            // rustdesk service kill `rustdesk --` processes
+            #[cfg(target_os = "linux")]
+            if args.len() > 2 {
+                crate::platform::gtk_sudo::exec();
+            }
+            return None;
+        } else {
+            #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if args[0] == "--plugin-install" {
+                if args.len() == 2 {
+                    crate::plugin::change_uninstall_plugin(&args[1], false);
+                } else if args.len() == 3 {
+                    crate::plugin::install_plugin_with_url(&args[1], &args[2]);
+                }
+                return None;
+            } else if args[0] == "--plugin-uninstall" {
+                if args.len() == 2 {
+                    crate::plugin::change_uninstall_plugin(&args[1], true);
+                }
+                return None;
+            }
+        }
+    }
+    //_async_logger_holder.map(|x| x.flush());
+    #[cfg(feature = "flutter")]
+    return Some(flutter_args);
+    #[cfg(not(feature = "flutter"))]
+    return Some(args);
 }
