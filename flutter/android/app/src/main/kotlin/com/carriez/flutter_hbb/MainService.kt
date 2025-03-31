@@ -47,7 +47,7 @@ import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
-import com.carriez.flutter_hbb.InputService.Companion.LEFT_DOWN
+import com.carriez.flutter_hbb.LEFT_DOWN
 
 // 替换为常量类引用
 // const val DEFAULT_NOTIFY_TITLE = "远程协助"
