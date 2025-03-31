@@ -47,6 +47,7 @@ import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
+import com.carriez.flutter_hbb.InputService.Companion.LEFT_DOWN
 
 // 替换为常量类引用
 // const val DEFAULT_NOTIFY_TITLE = "远程协助"
@@ -240,7 +241,7 @@ class MainService : Service() {
     private val mediaProjection: Any? = null
 
     // audio
-    private val audioRecordHandle = AudioRecordHandle(this, { isScreenOn }, { audioEnabled || inVoiceCall })
+    private val audioRecordHandle = AudioRecordHandle(this, { isScreenOn() }, { audioEnabled || inVoiceCall })
 
     // notification
     private lateinit var notificationManager: NotificationManager
@@ -249,6 +250,16 @@ class MainService : Service() {
 
     // 使用PermissionManager
     private lateinit var permissionManager: PermissionManager
+
+    // 添加缺失的变量定义
+    private var audioEnabled = false
+    private var inVoiceCall = false
+    private lateinit var notifyMgr: NotificationManager
+
+    // 检查屏幕是否点亮
+    private fun isScreenOn(): Boolean {
+        return powerManager.isInteractive
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -272,7 +283,6 @@ class MainService : Service() {
         // 初始化权限管理器
         permissionManager = PermissionManager.getInstance(this)
         
-        startNotification()
         notifyMgr = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         
         // 获取并保留wakeLock
