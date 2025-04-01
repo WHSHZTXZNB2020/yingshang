@@ -106,4 +106,5 @@ dependencies {
     implementation 'com.github.getActivity:XXPermissions:18.5'
     implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("1.8.0") } }
     implementation 'com.caverock:androidsvg-aar:1.4'
+    implementation 'androidx.core:core-splashscreen:1.0.0'
 }

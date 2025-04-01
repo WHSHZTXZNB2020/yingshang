@@ -37,6 +37,7 @@ import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.app.ActivityManager
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -97,15 +98,22 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 在super.onCreate()之前调用installSplashScreen
+        val splashScreen = installSplashScreen()
+        // 设置退出动画监听器，立即移除启动屏幕
+        splashScreen.setOnExitAnimationListener { splashScreenView ->
+            splashScreenView.remove()
+        }
+        
         super.onCreate(savedInstanceState)
         
         // 设置任务描述，修改任务管理器中显示的应用名称
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val taskDescription = ActivityManager.TaskDescription(getString(R.string.app_name))
+            val taskDescription = ActivityManager.TaskDescription("远程控制")
             setTaskDescription(taskDescription)
         } else {
             @Suppress("DEPRECATION")
-            val taskDescription = ActivityManager.TaskDescription(getString(R.string.app_name))
+            val taskDescription = ActivityManager.TaskDescription("远程控制")
             @Suppress("DEPRECATION")
             setTaskDescription(taskDescription)
         }
