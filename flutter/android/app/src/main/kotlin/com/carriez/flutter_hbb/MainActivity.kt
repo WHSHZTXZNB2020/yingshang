@@ -390,6 +390,14 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success(true)
                 }
+                "cancel_notification" -> {
+                    if (method.arguments is Int) {
+                        val id = method.arguments as Int
+                        mainService?.cancelNotification(id)
+                    } else {
+                        result.success(true)
+                    }
+                }
                 "enable_soft_keyboard" -> {
                     // https://blog.csdn.net/hanye2020/article/details/105553780
                     if (method.arguments as Boolean) {
@@ -398,6 +406,7 @@ class MainActivity : FlutterActivity() {
                         window.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
                     }
                     result.success(true)
+
                 }
                 "try_sync_clipboard" -> {
                     rdClipboardManager?.syncClipboard(true)
