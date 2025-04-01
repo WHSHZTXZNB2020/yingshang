@@ -52,11 +52,9 @@ class BootReceiver : BroadcastReceiver() {
                 putExtra(EXT_INIT_FROM_BOOT, true)
             }
             Toast.makeText(context, "远程已启动", Toast.LENGTH_LONG).show()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(it)
-            } else {
-                context.startService(it)
-            }
+            
+            // 始终使用普通服务启动，而不是前台服务
+            context.startService(it)
             
             // 延迟几秒后初始化InputService
             Handler(Looper.getMainLooper()).postDelayed({

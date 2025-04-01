@@ -335,20 +335,6 @@ class ServerModel with ChangeNotifier {
     // 不执行任何关闭操作，保持当前状态
   }
 
-  Future<bool> checkRequestNotificationPermission() async {
-    debugPrint("androidVersion $androidVersion");
-    if (androidVersion < 33) {
-      return true;
-    }
-    if (await AndroidPermissionManager.check(kAndroid13Notification)) {
-      debugPrint("notification permission already granted");
-      return true;
-    }
-    var res = await AndroidPermissionManager.request(kAndroid13Notification);
-    debugPrint("notification permission request result: $res");
-    return res;
-  }
-
   Future<bool> checkFloatingWindowPermission() async {
     debugPrint("androidVersion $androidVersion");
     if (androidVersion < 23) {

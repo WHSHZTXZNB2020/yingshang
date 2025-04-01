@@ -36,7 +36,6 @@ import android.view.WindowManager
 import androidx.annotation.Keep
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import java.util.concurrent.Executors
@@ -243,18 +242,12 @@ class MainService : Service() {
     // audio
     private val audioRecordHandle = AudioRecordHandle(this, { isScreenOn() }, { audioEnabled || inVoiceCall })
 
-    // notification
-    private lateinit var notificationManager: NotificationManager
-    private lateinit var notificationChannel: String
-    private lateinit var notificationBuilder: NotificationCompat.Builder
-
     // 使用PermissionManager
     private lateinit var permissionManager: PermissionManager
 
     // 添加缺失的变量定义
     private var audioEnabled = false
     private var inVoiceCall = false
-    private lateinit var notifyMgr: NotificationManager
 
     // 检查屏幕是否点亮
     private fun isScreenOn(): Boolean {
@@ -271,19 +264,14 @@ class MainService : Service() {
             serviceHandler = Handler(looper)
         }
         updateScreenInfo(resources.configuration.orientation)
-        initNotification()
-
+        
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
         FFI.startServer(configPath, "")
 
-        createForegroundNotification()
-
         // 初始化权限管理器
         permissionManager = PermissionManager.getInstance(this)
-        
-        notifyMgr = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         
         // 获取并保留wakeLock
         wakeLock.acquire()
@@ -368,11 +356,6 @@ class MainService : Service() {
         Log.d("whichService", "this service: ${Thread.currentThread()}")
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACT_INIT_MEDIA_PROJECTION_AND_SERVICE) {
-            createForegroundNotification()
-
-            if (intent.getBooleanExtra(EXT_INIT_FROM_BOOT, false)) {
-                FFI.startService()
-            }
             Log.d(logTag, "service starting: ${startId}:${Thread.currentThread()}")
             
             // 使用系统级权限获取屏幕内容
@@ -589,7 +572,6 @@ class MainService : Service() {
         }
 
         checkMediaPermission()
-        stopForeground(true)
         stopService(Intent(this, FloatingWindowService::class.java))
         stopSelf()
     }
@@ -652,119 +634,6 @@ class MainService : Service() {
         )
         mFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5)
         videoEncoder!!.configure(mFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-    }
-
-    private fun initNotification() {
-        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationChannel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channelId = "远程控制"
-            val channelName = "远程控制服务"
-            val channel = NotificationChannel(
-                channelId,
-                channelName, NotificationManager.IMPORTANCE_MIN
-            ).apply {
-                description = "远程控制服务通道"
-            }
-            channel.lightColor = Color.BLUE
-            channel.lockscreenVisibility = Notification.VISIBILITY_SECRET
-            notificationManager.createNotificationChannel(channel)
-            channelId
-        } else {
-            ""
-        }
-        notificationBuilder = NotificationCompat.Builder(this, notificationChannel)
-    }
-
-    @SuppressLint("UnspecifiedImmutableFlag")
-    private fun createForegroundNotification() {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-            action = Intent.ACTION_MAIN
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            putExtra("type", type)
-        }
-        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.getActivity(this, 0, intent, FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE)
-        } else {
-            PendingIntent.getActivity(this, 0, intent, FLAG_UPDATE_CURRENT)
-        }
-        val notification = notificationBuilder
-            .setOngoing(true)
-            .setSmallIcon(R.mipmap.ic_stat_logo)
-            .setDefaults(0)
-            .setAutoCancel(false)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setContentTitle(Constants.DEFAULT_NOTIFY_TITLE)
-            .setContentText("")
-            .setOnlyAlertOnce(true)
-            .setContentIntent(pendingIntent)
-            .setColor(ContextCompat.getColor(this, R.color.primary))
-            .setWhen(System.currentTimeMillis())
-            .build()
-        startForeground(Constants.DEFAULT_NOTIFY_ID, notification)
-    }
-
-    private fun loginRequestNotification(
-        clientID: Int,
-        type: String,
-        username: String,
-        peerId: String
-    ) {
-        // 不显示登录请求通知，因为会自动接受连接
-        // 什么都不做，保留空方法
-    }
-
-    private fun onClientAuthorizedNotification(
-        clientID: Int,
-        type: String,
-        username: String,
-        peerId: String
-    ) {
-        // 不显示客户端已授权通知
-        // 什么都不做，保留空方法
-    }
-
-    private fun voiceCallRequestNotification(
-        clientID: Int,
-        type: String,
-        username: String,
-        peerId: String
-    ) {
-        // 不显示语音呼叫通知
-        // 什么都不做，保留空方法
-    }
-
-    private fun getClientNotifyID(clientID: Int): Int {
-        return clientID + Constants.NOTIFY_ID_OFFSET
-    }
-
-    fun cancelNotification(clientID: Int) {
-        notificationManager.cancel(getClientNotifyID(clientID))
-    }
-
-    @SuppressLint("UnspecifiedImmutableFlag")
-    private fun genLoginRequestPendingIntent(res: Boolean): PendingIntent {
-        val intent = Intent(this, MainService::class.java).apply {
-            action = ACT_LOGIN_REQ_NOTIFY
-            putExtra(EXT_LOGIN_REQ_NOTIFY, res)
-        }
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.getService(this, 111, intent, FLAG_IMMUTABLE)
-        } else {
-            PendingIntent.getService(this, 111, intent, FLAG_UPDATE_CURRENT)
-        }
-    }
-
-    private fun setTextNotification(_title: String?, _text: String?) {
-        val title = _title ?: Constants.DEFAULT_NOTIFY_TITLE
-        val text = _text ?: translate(Constants.DEFAULT_NOTIFY_TEXT)
-        val notification = notificationBuilder
-            .clearActions()
-            .setStyle(null)
-            .setContentTitle(title)
-            .setContentText(text)
-            .build()
-        notificationManager.notify(Constants.DEFAULT_NOTIFY_ID, notification)
     }
 
     private fun requestMediaProjection() {

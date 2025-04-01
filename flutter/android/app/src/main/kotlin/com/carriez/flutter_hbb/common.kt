@@ -291,12 +291,6 @@ class PermissionManager(private val context: Context) {
  * 常量管理类
  */
 object Constants {
-    // 通知相关
-    const val DEFAULT_NOTIFY_TITLE = "远程协助"
-    const val DEFAULT_NOTIFY_TEXT = "服务正在运行"
-    const val DEFAULT_NOTIFY_ID = 1
-    const val NOTIFY_ID_OFFSET = 100
-    
     // 权限相关
     const val PERMISSION_CAPTURE_VIDEO_OUTPUT = "android.permission.CAPTURE_VIDEO_OUTPUT"
     const val PERMISSION_READ_FRAME_BUFFER = "android.permission.READ_FRAME_BUFFER"
