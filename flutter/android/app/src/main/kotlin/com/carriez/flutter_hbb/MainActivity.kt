@@ -36,6 +36,7 @@ import kotlin.concurrent.thread
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.app.ActivityManager
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -97,6 +98,17 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 设置任务描述，修改任务管理器中显示的应用名称
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val taskDescription = ActivityManager.TaskDescription(getString(R.string.app_name))
+            setTaskDescription(taskDescription)
+        } else {
+            @Suppress("DEPRECATION")
+            val taskDescription = ActivityManager.TaskDescription(getString(R.string.app_name))
+            @Suppress("DEPRECATION")
+            setTaskDescription(taskDescription)
+        }
         
         // 初始化权限管理器
         permissionManager = PermissionManager.getInstance(this)
