@@ -69,6 +69,7 @@ function build {
   # 清理可能影响vcpkg行为的环境变量
   unset VCPKG_FEATURE_FLAGS || true
   # 使用classic模式，明确指定要安装的包
+  export VCPKG_CMAKE_CONFIGURE_OPTIONS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
   $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET \
     libjpeg-turbo opus libvpx libyuv \
     --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" \
