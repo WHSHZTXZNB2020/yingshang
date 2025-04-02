@@ -2,7 +2,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO google/oboe
     REF 1.8.0
-    SHA512 b5f4cf103d1929ed56fd12b6fd32ba4146e35acae02a65cdfc18e3f83320bf4e8e1e0c63e72c6f571acbe3eea8f5cc13fe98abb24698895b02935c2a24786b13
+    SHA512 7eeaf85f9889e03dd1e7f5de0e9f2cee815fc555fddfdb8c4d3450d67f6ae11b0ca43b63c73e869bfc4629d2f8e5bdb23a5833c665ca5226c339f74b9b34a8ad
     HEAD_REF main
     PATCHES
         fix_install.patch
