@@ -162,6 +162,8 @@ jobs:
           doNotCache: false
 
       - name: Install vcpkg dependencies
+        env:
+          VCPKG_FEATURE_FLAGS: "manifests"
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)

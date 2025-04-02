@@ -137,6 +137,8 @@ jobs:
         vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
     - name: Install vcpkg dependencies
+      env:
+        VCPKG_FEATURE_FLAGS: "manifests"
       run: |
         $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
       shell: bash
