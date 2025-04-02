@@ -176,7 +176,8 @@ jobs:
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet $VCPKG_TRIPLET \
-            --x-install-root="$VCPKG_ROOT/installed"; then
+            --x-install-root="$VCPKG_ROOT/installed" \
+            --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
               echo "======"
@@ -1496,7 +1497,7 @@ jobs:
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet ${{ matrix.job.vcpkg-triplet }} \
-            --x-install-root="$VCPKG_ROOT/installed"; then
+            --x-install-root="$VCPKG_ROOT/installed" --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
               echo "======"
@@ -1904,7 +1905,7 @@ jobs:
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             # remove this when support higher version
             export USE_AOM_391=1
-            if ! $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"; then
+            if ! $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed" --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"; then
               find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
                 echo "$_1:"
                 echo "======"
