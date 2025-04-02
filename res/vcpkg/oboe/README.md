@@ -26,17 +26,25 @@ Expected hash: b5f4cf103d1929ed56fd12b6fd32ba4146e35acae02a65cdfc18e3f83320bf4e8
 Actual hash: 7eeaf85f9889e03dd1e7f5de0e9f2cee815fc555fddfdb8c4d3450d67f6ae11b0ca43b63c73e869bfc4629d2f8e5bdb23a5833c665ca5226c339f74b9b34a8ad
 ```
 
+3. 补丁文件格式错误：
+```
+Error:   Applying patch failed: error: corrupt patch at line 10
+```
+
 ## 解决方案
 
 1. 创建补丁文件`fix_install.patch`，将CMake最低版本从3.0更新到3.5，以满足现代CMake的要求。
 
 2. 在portfile.cmake中更新SHA512哈希值为实际值，解决哈希值验证失败问题。
 
+3. 修复补丁文件格式问题，确保正确的diff格式，避免额外的空行和格式问题。
+
 ## 修改内容
 
 1. 将CMake最低版本从3.0更新到3.5
 2. 更新SHA512哈希值以匹配实际文件
 3. 创建必要的portfile.cmake和vcpkg.json配置文件
+4. 确保补丁文件格式符合git标准
 
 ## 注意事项
 
