@@ -4,12 +4,12 @@ vcpkg_from_github(
     REF 1.8.0
     SHA512 7eeaf85f9889e03dd1e7f5de0e9f2cee815fc555fddfdb8c4d3450d67f6ae11b0ca43b63c73e869bfc4629d2f8e5bdb23a5833c665ca5226c339f74b9b34a8ad
     HEAD_REF main
-    PATCHES
-        fix_install.patch
 )
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 )
 
 vcpkg_cmake_install()
