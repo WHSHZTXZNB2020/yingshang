@@ -164,6 +164,7 @@ jobs:
       - name: Install vcpkg dependencies
         env:
           VCPKG_FEATURE_FLAGS: "manifests"
+          SKIP_OBOE: "true"
         run: |
           # 确保没有VCPKG_DISABLE_METRICS环境变量
           unset VCPKG_DISABLE_METRICS || true

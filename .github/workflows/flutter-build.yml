@@ -1053,6 +1053,20 @@ jobs:
               ANDROID_TARGET=x86
             ;;
           esac
+          # 下载和修补oboe源码
+          mkdir -p "$VCPKG_ROOT/buildtrees/oboe/src"
+          pushd "$VCPKG_ROOT/buildtrees/oboe/src"
+          if [ ! -d "oboe-1.8.0" ]; then
+            wget -q https://github.com/google/oboe/archive/refs/tags/1.8.0.tar.gz -O oboe.tar.gz
+            tar -xzf oboe.tar.gz
+            cd oboe-1.8.0
+            # 修改CMake最低版本要求
+            sed -i 's/cmake_minimum_required(VERSION 3.4.1)/cmake_minimum_required(VERSION 3.5)/g' CMakeLists.txt
+            # 添加CMake策略版本
+            sed -i '2i set(CMAKE_POLICY_VERSION 3.5)' CMakeLists.txt
+          fi
+          popd
+          # 继续构建依赖
           if ! ./flutter/build_android_deps.sh "${ANDROID_TARGET}"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
