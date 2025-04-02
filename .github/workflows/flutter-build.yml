@@ -18,7 +18,7 @@ on:
 # in this file!
 
 env:
-  VCPKG_FEATURE_FLAGS: "-manifests"
+  VCPKG_FEATURE_FLAGS: "manifests"
   SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   MAC_RUST_VERSION: "1.81" # 1.81 is requred for macos, because of https://github.com/yury/cidre requires 1.81
@@ -163,11 +163,19 @@ jobs:
 
       - name: Install vcpkg dependencies
         env:
-          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
+          VCPKG_FEATURE_FLAGS: "manifests"
         run: |
+          case ${{ matrix.job.target }} in
+            x86_64-pc-windows-msvc)
+              VCPKG_TRIPLET=x64-windows-static
+            ;;
+            aarch64-pc-windows-msvc)
+              VCPKG_TRIPLET=aarch64-windows-static
+            ;;
+          esac
           if ! $VCPKG_ROOT/vcpkg \
             install \
-            --triplet ${{ matrix.job.vcpkg-triplet }} \
+            --triplet $VCPKG_TRIPLET \
             --x-install-root="$VCPKG_ROOT/installed"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
@@ -178,7 +186,7 @@ jobs:
             done
             exit 1
           fi
-          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${VCPKG_TRIPLET}-rel-out.log" || true
         shell: bash
 
       - name: Build rustdesk
@@ -326,11 +334,19 @@ jobs:
 
       - name: Install vcpkg dependencies
         env:
-          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
+          VCPKG_FEATURE_FLAGS: "manifests"
         run: |
+          case ${{ matrix.job.target }} in
+            x86_64-pc-windows-msvc)
+              VCPKG_TRIPLET=x64-windows-static
+            ;;
+            aarch64-pc-windows-msvc)
+              VCPKG_TRIPLET=aarch64-windows-static
+            ;;
+          esac
           if ! $VCPKG_ROOT/vcpkg \
             install \
-            --triplet ${{ matrix.job.vcpkg-triplet }} \
+            --triplet $VCPKG_TRIPLET \
             --x-install-root="$VCPKG_ROOT/installed"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
@@ -341,7 +357,7 @@ jobs:
             done
             exit 1
           fi
-          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${VCPKG_TRIPLET}-rel-out.log" || true
         shell: bash
 
       - name: Build rustdesk
