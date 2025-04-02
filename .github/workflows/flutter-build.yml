@@ -58,8 +58,7 @@ jobs:
       fail-fast: false
 
   # 添加一个步骤在所有使用build.py的作业前
-  # 确保构建脚本有执行权限
-  make-build-script-executable:
+  # 确保构建脚本有执行权�?  make-build-script-executable:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
@@ -1038,7 +1037,7 @@ jobs:
 
       - name: Install vcpkg dependencies
         env:
-          VCPKG_FEATURE_FLAGS: "-manifests"
+          VCPKG_FEATURE_FLAGS: "manifests"
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
