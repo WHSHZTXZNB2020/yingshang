@@ -66,7 +66,20 @@ function build {
 
   echo "*** [$ANDROID_ABI][Start] Build and install vcpkg dependencies"
   pushd "$SCRIPTDIR/.."
-  $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+  # 清理可能影响vcpkg行为的环境变量
+  unset VCPKG_FEATURE_FLAGS || true
+  # 使用classic模式，明确指定要安装的包
+  $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET \
+    libjpeg-turbo opus libvpx libyuv \
+    --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" \
+    --classic
+  # 如果是Android平台，还需要安装这些包
+  if [[ "$VCPKG_TARGET" == *"-android" ]]; then
+    $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET \
+      cpu-features oboe \
+      --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" \
+      --classic
+  fi
   popd
   head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-$VCPKG_TARGET-rel-out.log" || true
   echo "*** [$ANDROID_ABI][Finished] Build and install vcpkg dependencies"
