@@ -6,6 +6,11 @@ pub use hbb_common::libc;
 #[cfg(dxgi)]
 extern crate winapi;
 
+#[cfg(feature = "aom")]
+pub mod aom;
+#[cfg(not(feature = "aom"))]
+pub mod aom_stub;
+
 pub use common::*;
 
 #[cfg(quartz)]

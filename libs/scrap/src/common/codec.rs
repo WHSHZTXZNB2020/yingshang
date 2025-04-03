@@ -11,8 +11,13 @@ use crate::hwcodec::*;
 use crate::mediacodec::{MediaCodecDecoder, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT};
 #[cfg(feature = "vram")]
 use crate::vram::*;
+
+#[cfg(feature = "aom")]
+use crate::aom::{self, AomDecoder, AomEncoder, AomEncoderConfig};
+#[cfg(not(feature = "aom"))]
+use crate::aom_stub::{self as aom, AomDecoder, AomEncoder, AomEncoderConfig};
+
 use crate::{
-    aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
     CodecFormat, EncodeInput, EncodeYuvFormat, ImageRgb, ImageTexture,

@@ -79,7 +79,7 @@ function build {
   fi
   # 使用classic模式，明确指定要安装的包
   $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET \
-    libjpeg-turbo opus libvpx libyuv \
+    libjpeg-turbo opus libvpx libyuv aom \
     --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" \
     --classic
   # 如果是Android平台，还需要安装这些包

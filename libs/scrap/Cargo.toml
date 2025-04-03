@@ -15,6 +15,7 @@ mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
 vram = ["hwcodec/vram"]
+aom = []
 
 [dependencies]
 cfg-if = "1.0"
