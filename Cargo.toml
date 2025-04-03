@@ -175,6 +175,7 @@ termios = "0.3"
 android_logger = "0.13"
 jni = "0.21"
 android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
+scrap = { path = "libs/scrap", features = ["wayland", "mediacodec"], default-features = false }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]
