@@ -118,7 +118,7 @@ impl AomEncoder {
     }
 
     // 静态方法，用于计算比特率
-    fn bitrate(width: u32, height: u32, ratio: f32) -> u32 {
+    fn bitrate(width: u32, height: u32, _ratio: f32) -> u32 {
         crate::codec::base_bitrate(width, height)
     }
 
@@ -208,4 +208,11 @@ impl GoogleImage for Image {
     fn chroma(&self) -> Chroma {
         Chroma::I420
     }
+}
+
+#[derive(Debug)]
+pub struct EncodeFrame<'a> {
+    pub data: &'a [u8],
+    pub key: bool,
+    pub pts: i64,
 } 
