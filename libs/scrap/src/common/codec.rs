@@ -1032,6 +1032,7 @@ fn disable_av1() -> bool {
 }
 
 #[cfg(not(target_os = "ios"))]
+#[cfg(feature = "aom")]
 pub fn test_av1() {
     use hbb_common::config::keys::OPTION_AV1_TEST;
     use hbb_common::rand::Rng;
@@ -1149,4 +1150,13 @@ pub fn test_av1() {
             );
         });
     });
+}
+
+#[cfg(not(target_os = "ios"))]
+#[cfg(not(feature = "aom"))]
+pub fn test_av1() {
+    use hbb_common::config::keys::OPTION_AV1_TEST;
+    log::info!("AV1 support is not available (aom feature not enabled)");
+    // AV1不可用，设置为N
+    Config::set_option(OPTION_AV1_TEST.to_string(), "N".to_string());
 }

@@ -145,7 +145,7 @@ pub struct AomDecoder {}
 impl AomDecoder {
     pub fn new() -> Result<Self> {
         log::warn!("AOM decoder is not available: using stub implementation");
-        Err(Error::FailedCall("AOM decoder is not available".to_string()))
+        Ok(Self {})
     }
 
     pub fn decode(&mut self, _data: &[u8]) -> Result<DecodeFrames> {
