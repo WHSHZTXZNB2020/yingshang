@@ -66,43 +66,7 @@ function build {
 
   echo "*** [$ANDROID_ABI][Start] Build and install vcpkg dependencies"
   pushd "$SCRIPTDIR/.."
-  # 清理可能影响vcpkg行为的环境变量
-  unset VCPKG_FEATURE_FLAGS || true
-  # 设置环境变量来控制CMake行为
-  export VCPKG_CMAKE_CONFIGURE_OPTIONS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
-  export CMAKE_POLICY_VERSION_MINIMUM=3.5
-  # 创建临时CMake工具链文件
-  TMP_CMAKE_TOOLCHAIN_FILE=$(mktemp)
-  echo "set(CMAKE_POLICY_VERSION 3.5)" > $TMP_CMAKE_TOOLCHAIN_FILE
-  if [ -f "$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" ]; then
-    echo "include(\"$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake\")" >> $TMP_CMAKE_TOOLCHAIN_FILE
-  fi
-  # 使用classic模式，明确指定要安装的包
-  $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET \
-    libjpeg-turbo opus libvpx libyuv aom \
-    --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" \
-    --classic
-  # 如果是Android平台，还需要安装这些包
-  if [[ "$VCPKG_TARGET" == *"-android" ]]; then
-    # 安装cpu-features
-    $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET \
-      cpu-features \
-      --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" \
-      --classic
-    
-    # 只有在SKIP_OBOE不为true时才安装oboe
-    if [[ "$SKIP_OBOE" != "true" ]]; then
-      echo "Installing oboe library..."
-      $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET \
-        oboe \
-        --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5;-DCMAKE_TOOLCHAIN_FILE=$TMP_CMAKE_TOOLCHAIN_FILE" \
-        --classic
-    else
-      echo "Skipping oboe library installation as SKIP_OBOE is set."
-    fi
-  fi
-  # 清理临时文件
-  rm -f $TMP_CMAKE_TOOLCHAIN_FILE
+  $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET --x-install-root="$VCPKG_ROOT/installed"
   popd
   head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-$VCPKG_TARGET-rel-out.log" || true
   echo "*** [$ANDROID_ABI][Finished] Build and install vcpkg dependencies"

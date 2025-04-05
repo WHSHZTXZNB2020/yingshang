@@ -160,25 +160,9 @@ jobs:
           vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
-          
-      - name: Pre-install aom for all architectures
-        run: |
-          # 预先安装aom库的各种架构
-          for TARGET in arm-neon-android arm64-android x64-android x86-android
-          do
-            echo "Installing aom for $TARGET..."
-            $VCPKG_ROOT/vcpkg install aom --triplet $TARGET --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" --classic || true
-          done
-        shell: bash
 
       - name: Install vcpkg dependencies
-        env:
-          VCPKG_FEATURE_FLAGS: "manifests"
-          SKIP_OBOE: "true"
         run: |
-          # 确保没有VCPKG_DISABLE_METRICS环境变量
-          unset VCPKG_DISABLE_METRICS || true
-          # 确保使用清单模式
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
               ANDROID_TARGET=arm64-v8a
@@ -202,57 +186,6 @@ jobs:
               echo ""
             done
             exit 1
-          fi
-        shell: bash
-
-      - name: Fix AOM library if needed
-        run: |
-          # 检查aom头文件是否存在
-          case ${{ matrix.job.target }} in
-            aarch64-linux-android)
-              VCPKG_TARGET=arm64-android
-              ANDROID_TARGET=arm64-v8a
-            ;;
-            armv7-linux-androideabi)
-              VCPKG_TARGET=arm-neon-android
-              ANDROID_TARGET=armeabi-v7a
-            ;;
-            *)
-              echo "Unsupported target: ${{ matrix.job.target }}"
-              exit 1
-            ;;
-          esac
-          
-          # 如果arm-neon-android目录已移动到arm-android，则使用arm-android
-          if [ -d "$VCPKG_ROOT/installed/arm-android" ]; then
-            INCLUDE_DIR="$VCPKG_ROOT/installed/arm-android/include"
-          else
-            INCLUDE_DIR="$VCPKG_ROOT/installed/$VCPKG_TARGET/include"
-          fi
-          
-          # 检查aom头文件
-          if [ ! -f "$INCLUDE_DIR/aom/aom.h" ]; then
-            echo "AOM header file not found. Installing aom package..."
-            $VCPKG_ROOT/vcpkg install aom --triplet $VCPKG_TARGET --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5" --classic
-            
-            # 如果还是找不到，尝试从其他架构复制
-            if [ ! -f "$INCLUDE_DIR/aom/aom.h" ]; then
-              echo "Still can't find AOM header. Attempting to copy from x64-linux..."
-              mkdir -p "$INCLUDE_DIR/aom"
-              if [ -f "$VCPKG_ROOT/installed/x64-linux/include/aom/aom.h" ]; then
-                cp -r $VCPKG_ROOT/installed/x64-linux/include/aom/* $INCLUDE_DIR/aom/
-              fi
-            fi
-          fi
-          
-          # 检查并列出所有库文件
-          echo "Checking installed libraries in $INCLUDE_DIR:"
-          find $INCLUDE_DIR -type f -name "*.h" | sort
-          echo "AOM header exists: $INCLUDE_DIR/aom/aom.h"
-          if [ -f "$INCLUDE_DIR/aom/aom.h" ]; then
-            echo "AOM header file found."
-          else
-            echo "WARNING: AOM header file still not found!"
           fi
         shell: bash
 

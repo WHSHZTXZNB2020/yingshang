@@ -162,8 +162,6 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
-        env:
-          VCPKG_FEATURE_FLAGS: "manifests"
         run: |
           $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
           
@@ -325,8 +323,6 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
-        env:
-          VCPKG_FEATURE_FLAGS: "manifests"
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)

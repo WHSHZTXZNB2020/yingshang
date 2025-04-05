@@ -18,7 +18,6 @@ on:
 # in this file!
 
 env:
-  VCPKG_FEATURE_FLAGS: "manifests"
   SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   MAC_RUST_VERSION: "1.81" # 1.81 is requred for macos, because of https://github.com/yury/cidre requires 1.81
@@ -58,7 +57,8 @@ jobs:
       fail-fast: false
 
   # 添加一个步骤在所有使用build.py的作业前
-  # 确保构建脚本有执行权�?  make-build-script-executable:
+  # 确保构建脚本有执行权限
+  make-build-script-executable:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
@@ -162,21 +162,12 @@ jobs:
 
       - name: Install vcpkg dependencies
         env:
-          VCPKG_FEATURE_FLAGS: "manifests"
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
-          case ${{ matrix.job.target }} in
-            x86_64-pc-windows-msvc)
-              VCPKG_TRIPLET=x64-windows-static
-            ;;
-            aarch64-pc-windows-msvc)
-              VCPKG_TRIPLET=aarch64-windows-static
-            ;;
-          esac
           if ! $VCPKG_ROOT/vcpkg \
             install \
-            --triplet $VCPKG_TRIPLET \
-            --x-install-root="$VCPKG_ROOT/installed" \
-            --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"; then
+            --triplet ${{ matrix.job.vcpkg-triplet }} \
+            --x-install-root="$VCPKG_ROOT/installed"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
               echo "======"
@@ -186,7 +177,7 @@ jobs:
             done
             exit 1
           fi
-          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${VCPKG_TRIPLET}-rel-out.log" || true
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
       - name: Build rustdesk
@@ -334,19 +325,11 @@ jobs:
 
       - name: Install vcpkg dependencies
         env:
-          VCPKG_FEATURE_FLAGS: "manifests"
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
-          case ${{ matrix.job.target }} in
-            x86_64-pc-windows-msvc)
-              VCPKG_TRIPLET=x64-windows-static
-            ;;
-            aarch64-pc-windows-msvc)
-              VCPKG_TRIPLET=aarch64-windows-static
-            ;;
-          esac
           if ! $VCPKG_ROOT/vcpkg \
             install \
-            --triplet $VCPKG_TRIPLET \
+            --triplet ${{ matrix.job.vcpkg-triplet }} \
             --x-install-root="$VCPKG_ROOT/installed"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
@@ -357,7 +340,7 @@ jobs:
             done
             exit 1
           fi
-          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${VCPKG_TRIPLET}-rel-out.log" || true
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
       - name: Build rustdesk
@@ -1036,8 +1019,6 @@ jobs:
           doNotCache: false
 
       - name: Install vcpkg dependencies
-        env:
-          VCPKG_FEATURE_FLAGS: "manifests"
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
@@ -1053,20 +1034,6 @@ jobs:
               ANDROID_TARGET=x86
             ;;
           esac
-          # 下载和修补oboe源码
-          mkdir -p "$VCPKG_ROOT/buildtrees/oboe/src"
-          pushd "$VCPKG_ROOT/buildtrees/oboe/src"
-          if [ ! -d "oboe-1.8.0" ]; then
-            wget -q https://github.com/google/oboe/archive/refs/tags/1.8.0.tar.gz -O oboe.tar.gz
-            tar -xzf oboe.tar.gz
-            cd oboe-1.8.0
-            # 修改CMake最低版本要求
-            sed -i 's/cmake_minimum_required(VERSION 3.4.1)/cmake_minimum_required(VERSION 3.5)/g' CMakeLists.txt
-            # 添加CMake策略版本
-            sed -i '2i set(CMAKE_POLICY_VERSION 3.5)' CMakeLists.txt
-          fi
-          popd
-          # 继续构建依赖
           if ! ./flutter/build_android_deps.sh "${ANDROID_TARGET}"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
@@ -1510,7 +1477,7 @@ jobs:
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet ${{ matrix.job.vcpkg-triplet }} \
-            --x-install-root="$VCPKG_ROOT/installed" --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"; then
+            --x-install-root="$VCPKG_ROOT/installed"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
               echo "======"
@@ -1918,7 +1885,7 @@ jobs:
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             # remove this when support higher version
             export USE_AOM_391=1
-            if ! $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed" --x-cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"; then
+            if ! $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"; then
               find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
                 echo "$_1:"
                 echo "======"
