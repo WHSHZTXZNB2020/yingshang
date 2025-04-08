@@ -50,7 +50,7 @@
             android:name=".InputService"
             android:enabled="true"
             android:exported="false"
-            android:label="RustDesk Input" />
+            android:label="远程控制 Input" />
 
         <activity
             android:name=".MainActivity"
