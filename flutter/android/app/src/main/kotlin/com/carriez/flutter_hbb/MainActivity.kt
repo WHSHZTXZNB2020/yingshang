@@ -121,15 +121,10 @@ class MainActivity : FlutterActivity() {
                 
                 if (hasSurfaceFlingerPermission) {
                     try {
+                        // 使用ToastUtils显示无图标的Toast
                         ToastUtils.showReadyToast(this)
                     } catch (e: Exception) {
-                        val toast = android.widget.Toast.makeText(
-                            this,
-                            Constants.TEXT_READY,
-                            android.widget.Toast.LENGTH_SHORT
-                        )
-                        toast.setGravity(android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL, 0, 100)
-                        toast.show()
+                        Log.e(logTag, "显示Toast失败: ${e.message}")
                     }
                 }
             }
