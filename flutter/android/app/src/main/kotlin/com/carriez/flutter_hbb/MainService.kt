@@ -47,21 +47,6 @@ import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
-const val DEFAULT_NOTIFY_TITLE = "远程协助"
-const val DEFAULT_NOTIFY_TEXT = "Service is running"
-const val DEFAULT_NOTIFY_ID = 1
-const val NOTIFY_ID_OFFSET = 100
-
-const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
-
-
-// video const
-
-const val MAX_SCREEN_SIZE = 1400
-
-const val VIDEO_KEY_BIT_RATE = 1024_000
-const val VIDEO_KEY_FRAME_RATE = 30
-
 class MainService : Service() {
 
     @Keep
@@ -233,11 +218,6 @@ class MainService : Service() {
             get() = _isStart
         val isAudioStart: Boolean
             get() = _isAudioStart
-            
-        // 系统级权限常量字符串
-        const val PERMISSION_CAPTURE_VIDEO_OUTPUT = "android.permission.CAPTURE_VIDEO_OUTPUT"
-        const val PERMISSION_READ_FRAME_BUFFER = "android.permission.READ_FRAME_BUFFER"
-        const val PERMISSION_ACCESS_SURFACE_FLINGER = "android.permission.ACCESS_SURFACE_FLINGER"
     }
 
     private val logTag = "LOG_SERVICE"
@@ -325,7 +305,7 @@ class MainService : Service() {
         Log.d(logTag,"updateScreenInfo:w:$w,h:$h")
         var scale = 1
         if (w != 0 && h != 0) {
-            if (isHalfScale == true && (w > MAX_SCREEN_SIZE || h > MAX_SCREEN_SIZE)) {
+            if (isHalfScale == true && (w > Constants.MAX_SCREEN_SIZE || h > Constants.MAX_SCREEN_SIZE)) {
                 scale = 2
                 w /= scale
                 h /= scale
@@ -389,9 +369,9 @@ class MainService : Service() {
 
     // 恢复系统级权限之间的降级检查
     private fun checkSystemPermissions() {
-        val captureVideoPermission = checkCallingOrSelfPermission(PERMISSION_CAPTURE_VIDEO_OUTPUT)
-        val readFrameBufferPermission = checkCallingOrSelfPermission(PERMISSION_READ_FRAME_BUFFER)
-        val accessSurfaceFlingerPermission = checkCallingOrSelfPermission(PERMISSION_ACCESS_SURFACE_FLINGER)
+        val captureVideoPermission = checkCallingOrSelfPermission(Constants.PERMISSION_CAPTURE_VIDEO_OUTPUT)
+        val readFrameBufferPermission = checkCallingOrSelfPermission(Constants.PERMISSION_READ_FRAME_BUFFER)
+        val accessSurfaceFlingerPermission = checkCallingOrSelfPermission(Constants.PERMISSION_ACCESS_SURFACE_FLINGER)
         
         // 优先检查 ACCESS_SURFACE_FLINGER 权限
         val hasSurfaceFlingerPermission = accessSurfaceFlingerPermission == PackageManager.PERMISSION_GRANTED
@@ -474,12 +454,12 @@ class MainService : Service() {
         }
         
         // 检查系统级权限
-        val accessSurfaceFlingerPermission = checkCallingOrSelfPermission(PERMISSION_ACCESS_SURFACE_FLINGER)
+        val accessSurfaceFlingerPermission = checkCallingOrSelfPermission(Constants.PERMISSION_ACCESS_SURFACE_FLINGER)
         val hasSurfaceFlingerPermission = accessSurfaceFlingerPermission == PackageManager.PERMISSION_GRANTED
         
         // 检查其他系统级权限
-        val captureVideoPermission = checkCallingOrSelfPermission(PERMISSION_CAPTURE_VIDEO_OUTPUT)
-        val readFrameBufferPermission = checkCallingOrSelfPermission(PERMISSION_READ_FRAME_BUFFER)
+        val captureVideoPermission = checkCallingOrSelfPermission(Constants.PERMISSION_CAPTURE_VIDEO_OUTPUT)
+        val readFrameBufferPermission = checkCallingOrSelfPermission(Constants.PERMISSION_READ_FRAME_BUFFER)
         val hasOtherPermissions = captureVideoPermission == PackageManager.PERMISSION_GRANTED && 
                                 readFrameBufferPermission == PackageManager.PERMISSION_GRANTED
         
@@ -637,12 +617,12 @@ class MainService : Service() {
     }
 
     private fun createMediaCodec() {
-        Log.d(logTag, "MediaFormat.MIMETYPE_VIDEO_VP9 :$MIME_TYPE")
-        videoEncoder = MediaCodec.createEncoderByType(MIME_TYPE)
+        Log.d(logTag, "MediaFormat.MIMETYPE_VIDEO_VP9 :${Constants.VIDEO_MIME_TYPE}")
+        videoEncoder = MediaCodec.createEncoderByType(Constants.VIDEO_MIME_TYPE)
         val mFormat =
-            MediaFormat.createVideoFormat(MIME_TYPE, SCREEN_INFO.width, SCREEN_INFO.height)
-        mFormat.setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_KEY_BIT_RATE)
-        mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VIDEO_KEY_FRAME_RATE)
+            MediaFormat.createVideoFormat(Constants.VIDEO_MIME_TYPE, SCREEN_INFO.width, SCREEN_INFO.height)
+        mFormat.setInteger(MediaFormat.KEY_BIT_RATE, Constants.VIDEO_KEY_BIT_RATE)
+        mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, Constants.VIDEO_KEY_FRAME_RATE)
         mFormat.setInteger(
             MediaFormat.KEY_COLOR_FORMAT,
             MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
@@ -695,14 +675,14 @@ class MainService : Service() {
             .setDefaults(0)
             .setAutoCancel(false)
             .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setContentTitle(DEFAULT_NOTIFY_TITLE)
+            .setContentTitle(Constants.DEFAULT_NOTIFY_TITLE)
             .setContentText("")
             .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .setColor(ContextCompat.getColor(this, R.color.primary))
             .setWhen(System.currentTimeMillis())
             .build()
-        startForeground(DEFAULT_NOTIFY_ID, notification)
+        startForeground(Constants.DEFAULT_NOTIFY_ID, notification)
     }
 
     private fun loginRequestNotification(
@@ -736,7 +716,7 @@ class MainService : Service() {
     }
 
     private fun getClientNotifyID(clientID: Int): Int {
-        return clientID + NOTIFY_ID_OFFSET
+        return clientID + Constants.NOTIFY_ID_OFFSET
     }
 
     fun cancelNotification(clientID: Int) {
@@ -757,15 +737,15 @@ class MainService : Service() {
     }
 
     private fun setTextNotification(_title: String?, _text: String?) {
-        val title = _title ?: DEFAULT_NOTIFY_TITLE
-        val text = _text ?: translate(DEFAULT_NOTIFY_TEXT)
+        val title = _title ?: Constants.DEFAULT_NOTIFY_TITLE
+        val text = _text ?: translate(Constants.DEFAULT_NOTIFY_TEXT)
         val notification = notificationBuilder
             .clearActions()
             .setStyle(null)
             .setContentTitle(title)
             .setContentText(text)
             .build()
-        notificationManager.notify(DEFAULT_NOTIFY_ID, notification)
+        notificationManager.notify(Constants.DEFAULT_NOTIFY_ID, notification)
     }
 
     private fun requestMediaProjection() {

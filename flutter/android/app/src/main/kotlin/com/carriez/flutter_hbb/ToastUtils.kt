@@ -1,33 +1,44 @@
 package com.carriez.flutter_hbb
 
 import android.content.Context
-import android.view.Gravity
-import android.view.LayoutInflater
-import android.view.View
 import android.widget.Toast
+import android.view.Gravity
+import android.util.Log
 
 /**
- * 自定义Toast工具类
+ * Toast工具类，用于显示各种Toast消息
  */
 object ToastUtils {
+    private const val TAG = "ToastUtils"
     
     /**
-     * 显示"已就绪"提示Toast
+     * 显示已就绪的Toast消息
      */
     fun showReadyToast(context: Context) {
         try {
-            val inflater = context.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
-            val layout: View = inflater.inflate(R.layout.toast_high_performance, null)
-            
-            val toast = Toast(context)
-            // 设置为屏幕底部
+            val toast = Toast.makeText(
+                context,
+                Constants.TEXT_READY,
+                Toast.LENGTH_SHORT
+            )
             toast.setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, 100)
-            toast.duration = Toast.LENGTH_SHORT
-            toast.view = layout
+            toast.show()
+            Log.d(TAG, "显示已就绪Toast")
+        } catch (e: Exception) {
+            Log.e(TAG, "显示Toast出错: ${e.message}")
+        }
+    }
+    
+    /**
+     * 显示自定义消息的Toast
+     */
+    fun showToast(context: Context, message: String, duration: Int = Toast.LENGTH_SHORT) {
+        try {
+            val toast = Toast.makeText(context, message, duration)
+            toast.setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, 100)
             toast.show()
         } catch (e: Exception) {
-            // 如果自定义Toast失败，回退到标准Toast
-            Toast.makeText(context, "已就绪", Toast.LENGTH_SHORT).show()
+            Log.e(TAG, "显示Toast出错: ${e.message}")
         }
     }
 } 

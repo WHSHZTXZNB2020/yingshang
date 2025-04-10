@@ -223,7 +223,38 @@ fun getDeviceSN(context: Context): String {
 }
 
 /**
- * 统一权限管理类，用于处理所有权限相关逻辑
+ * 常量管理类
+ */
+object Constants {
+    // 通知相关
+    const val DEFAULT_NOTIFY_TITLE = "远程协助"
+    const val DEFAULT_NOTIFY_TEXT = "Service is running"
+    const val DEFAULT_NOTIFY_ID = 1
+    const val NOTIFY_ID_OFFSET = 100
+    
+    // 权限相关
+    const val PERMISSION_CAPTURE_VIDEO_OUTPUT = "android.permission.CAPTURE_VIDEO_OUTPUT"
+    const val PERMISSION_READ_FRAME_BUFFER = "android.permission.READ_FRAME_BUFFER"
+    const val PERMISSION_ACCESS_SURFACE_FLINGER = "android.permission.ACCESS_SURFACE_FLINGER"
+    const val READ_PHONE_STATE = "android.permission.READ_PHONE_STATE"
+    
+    // UI文本
+    const val TEXT_READY = "已就绪"
+    const val TEXT_FILE_CONNECTION = "文件连接"
+    const val TEXT_SCREEN_CONNECTION = "屏幕连接"
+    const val TEXT_VOICE_CALL = "语音通话"
+    const val TEXT_FAILED_SWITCH_TO_VOICE_CALL = "无法切换至语音通话"
+    const val TEXT_FAILED_SWITCH_OUT_VOICE_CALL = "无法退出语音通话"
+    
+    // 视频相关
+    const val VIDEO_MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
+    const val VIDEO_KEY_BIT_RATE = 1024_000
+    const val VIDEO_KEY_FRAME_RATE = 30
+    const val MAX_SCREEN_SIZE = 1400
+}
+
+/**
+ * 权限管理器类
  */
 class PermissionManager(private val context: Context) {
     companion object {
@@ -285,35 +316,4 @@ class PermissionManager(private val context: Context) {
             put("res", true)  // 始终返回true表示接受连接
         }
     }
-}
-
-/**
- * 常量管理类
- */
-object Constants {
-    // 通知相关
-    const val DEFAULT_NOTIFY_TITLE = "远程协助"
-    const val DEFAULT_NOTIFY_TEXT = "服务正在运行"
-    const val DEFAULT_NOTIFY_ID = 1
-    const val NOTIFY_ID_OFFSET = 100
-    
-    // 权限相关
-    const val PERMISSION_CAPTURE_VIDEO_OUTPUT = "android.permission.CAPTURE_VIDEO_OUTPUT"
-    const val PERMISSION_READ_FRAME_BUFFER = "android.permission.READ_FRAME_BUFFER"
-    const val PERMISSION_ACCESS_SURFACE_FLINGER = "android.permission.ACCESS_SURFACE_FLINGER"
-    const val READ_PHONE_STATE = "android.permission.READ_PHONE_STATE"
-    
-    // UI文本
-    const val TEXT_READY = "已就绪"
-    const val TEXT_FILE_CONNECTION = "文件连接"
-    const val TEXT_SCREEN_CONNECTION = "屏幕连接"
-    const val TEXT_VOICE_CALL = "语音通话"
-    const val TEXT_FAILED_SWITCH_TO_VOICE_CALL = "无法切换至语音通话"
-    const val TEXT_FAILED_SWITCH_OUT_VOICE_CALL = "无法退出语音通话"
-    
-    // 视频相关
-    const val VIDEO_MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
-    const val VIDEO_KEY_BIT_RATE = 1024_000
-    const val VIDEO_KEY_FRAME_RATE = 30
-    const val MAX_SCREEN_SIZE = 1400
 }
