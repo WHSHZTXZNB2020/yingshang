@@ -222,11 +222,12 @@ class MainService : Service() {
         const val PERMISSION_ACCESS_SURFACE_FLINGER = "android.permission.ACCESS_SURFACE_FLINGER"
     }
 
-    private val logTag = "MainService"
+    private val logTag = "LOG_SERVICE"
     private val useVP9 = false
     private val binder = LocalBinder()
 
-    private var reuseVirtualDisplay = Build.VERSION.SDK_INT > 33
+    // 修改Android版本判断，包括Android 13
+    private var reuseVirtualDisplay = Build.VERSION.SDK_INT >= 33
 
     // video
     private var display: Display? = null
@@ -236,6 +237,28 @@ class MainService : Service() {
     private var videoEncoder: MediaCodec? = null
     private var imageReader: ImageReader? = null
     private var virtualDisplay: VirtualDisplay? = null
+    
+    // 添加VirtualDisplay回调处理
+    private val virtualDisplayCallback = object : VirtualDisplay.Callback() {
+        override fun onPaused() {
+            Log.d(logTag, "VirtualDisplay onPaused")
+            super.onPaused()
+        }
+
+        override fun onResumed() {
+            Log.d(logTag, "VirtualDisplay onResumed")
+            super.onResumed()
+        }
+
+        override fun onStopped() {
+            Log.d(logTag, "VirtualDisplay onStopped")
+            super.onStopped()
+            // 安全处理已停止的VirtualDisplay
+            if (!reuseVirtualDisplay) {
+                virtualDisplay = null
+            }
+        }
+    }
     
     // 添加空的mediaProjection变量以解决编译错误
     private val mediaProjection: Any? = null
@@ -293,6 +316,26 @@ class MainService : Service() {
         checkMediaPermission()
         stopService(Intent(this, FloatingWindowService::class.java))
         super.onDestroy()
+        
+        Log.d(logTag, "MainService onDestroy - 确保销毁所有资源")
+        try {
+            // 再次确保所有资源都被释放
+            if (isStart) {
+                stopCapture()
+            }
+            
+            // 检查虚拟显示是否还存在
+            if (virtualDisplay != null) {
+                try {
+                    virtualDisplay?.release()
+                } catch (e: Exception) {
+                    Log.e(logTag, "onDestroy时释放VirtualDisplay异常: ${e.message}")
+                }
+                virtualDisplay = null
+            }
+        } catch (e: Exception) {
+            Log.e(logTag, "onDestroy过程中异常: ${e.message}")
+        }
     }
 
     private var isHalfScale: Boolean? = null;
@@ -430,13 +473,13 @@ class MainService : Service() {
 
     @SuppressLint("WrongConstant")
     private fun createSurface(): Surface? {
-        return if (useVP9) {
-            // TODO
-            null
-        } else {
-            Log.d(logTag, "ImageReader.newInstance:INFO:$SCREEN_INFO")
-            imageReader =
-                ImageReader.newInstance(
+        try {
+            if (useVP9) {
+                // TODO
+                return null
+            } else {
+                Log.d(logTag, "ImageReader.newInstance:INFO:$SCREEN_INFO")
+                imageReader = ImageReader.newInstance(
                     SCREEN_INFO.width,
                     SCREEN_INFO.height,
                     PixelFormat.RGBA_8888,
@@ -444,20 +487,37 @@ class MainService : Service() {
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
+                            // 检查是否仍在捕获状态，避免关闭后继续访问资源
+                            if (!isStart) return@setOnImageAvailableListener
+                            
                             // If not call acquireLatestImage, listener will not be called again
-                            imageReader.acquireLatestImage().use { image ->
-                                if (image == null || !isStart) return@setOnImageAvailableListener
-                                val planes = image.planes
-                                val buffer = planes[0].buffer
-                                buffer.rewind()
-                                FFI.onVideoFrameUpdate(buffer)
+                            val image = imageReader.acquireLatestImage()
+                            if (image != null) {
+                                try {
+                                    if (!isStart) {
+                                        image.close()
+                                        return@setOnImageAvailableListener
+                                    }
+                                    
+                                    val planes = image.planes
+                                    val buffer = planes[0].buffer
+                                    buffer.rewind()
+                                    FFI.onVideoFrameUpdate(buffer)
+                                } finally {
+                                    image.close()
+                                }
                             }
-                        } catch (ignored: java.lang.Exception) {
+                        } catch (e: Exception) {
+                            Log.e(logTag, "ImageReader异常: ${e.message}")
                         }
                     }, serviceHandler)
                 }
-            Log.d(logTag, "ImageReader.setOnImageAvailableListener done")
-            imageReader?.surface
+                Log.d(logTag, "ImageReader.setOnImageAvailableListener done")
+                return imageReader?.surface
+            }
+        } catch (e: Exception) {
+            Log.e(logTag, "创建Surface异常: ${e.message}")
+            return null
         }
     }
 
@@ -472,8 +532,16 @@ class MainService : Service() {
     }
 
     fun startCapture(): Boolean {
+        // 检查是否已经处于捕获状态
         if (isStart) {
-            return true
+            Log.d(logTag, "已经在捕获状态，先停止当前捕获")
+            stopCapture()
+            // 短暂延迟以确保资源释放
+            try {
+                Thread.sleep(100)
+            } catch (e: Exception) {
+                Log.e(logTag, "延迟等待异常: ${e.message}")
+            }
         }
         
         // 检查系统级权限
@@ -518,6 +586,15 @@ class MainService : Service() {
             }
         }
 
+        // 检查虚拟显示是否创建成功
+        if (virtualDisplay == null) {
+            Log.e(logTag, "创建虚拟显示失败，中止捕获")
+            // 释放已创建的资源
+            surface?.release()
+            surface = null
+            return false
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!audioRecordHandle.createAudioRecorder(false, null)) {
                 Log.d(logTag, "createAudioRecorder fail")
@@ -545,33 +622,63 @@ class MainService : Service() {
         FFI.setFrameRawEnable("video",false)
         _isStart = false
         MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
-        // release video
-        if (reuseVirtualDisplay) {
-            // The virtual display video projection can be paused by calling `setSurface(null)`.
-            // https://developer.android.com/reference/android/hardware/display/VirtualDisplay.Callback
-            // https://learn.microsoft.com/en-us/dotnet/api/android.hardware.display.virtualdisplay.callback.onpaused?view=net-android-34.0
-            virtualDisplay?.setSurface(null)
-        } else {
-            virtualDisplay?.release()
+        
+        try {
+            // 按顺序释放资源，避免引用异常
+            if (reuseVirtualDisplay) {
+                // 在Android 13+上，只需要将surface设为null，不立即释放VirtualDisplay
+                Log.d(logTag, "暂停VirtualDisplay (Android 13+)")
+                try {
+                    virtualDisplay?.setSurface(null)
+                } catch (e: Exception) {
+                    Log.e(logTag, "暂停VirtualDisplay异常: ${e.message}")
+                }
+            } else {
+                // 在低版本Android上释放VirtualDisplay
+                Log.d(logTag, "释放VirtualDisplay (低版本Android)")
+                try {
+                    virtualDisplay?.release()
+                    virtualDisplay = null
+                } catch (e: Exception) {
+                    Log.e(logTag, "释放VirtualDisplay异常: ${e.message}")
+                    virtualDisplay = null
+                }
+            }
+            
+            // 先释放ImageReader
+            Log.d(logTag, "释放ImageReader")
+            try {
+                imageReader?.close()
+            } catch (e: Exception) {
+                Log.e(logTag, "释放ImageReader异常: ${e.message}")
+            }
+            imageReader = null
+            
+            // 释放视频编码器
+            try {
+                videoEncoder?.let {
+                    it.signalEndOfInputStream()
+                    it.stop()
+                    it.release()
+                }
+            } catch (e: Exception) {
+                Log.e(logTag, "释放视频编码器异常: ${e.message}")
+            }
+            videoEncoder = null
+            
+            // 最后释放Surface
+            Log.d(logTag, "释放Surface")
+            try {
+                surface?.release()
+            } catch (e: Exception) {
+                Log.e(logTag, "释放Surface异常: ${e.message}")
+            }
+            surface = null
+        } catch (e: Exception) {
+            Log.e(logTag, "停止捕获全局异常: ${e.message}")
         }
-        // suface needs to be release after `imageReader.close()` to imageReader access released surface
-        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
-        imageReader?.close()
-        imageReader = null
-        videoEncoder?.let {
-            it.signalEndOfInputStream()
-            it.stop()
-            it.release()
-        }
-        if (!reuseVirtualDisplay) {
-            virtualDisplay = null
-        }
-        videoEncoder = null
-        // suface needs to be release after `imageReader.close()` to imageReader access released surface
-        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
-        surface?.release()
 
-        // release audio
+        // 释放音频
         _isAudioStart = false
         audioRecordHandle.tryReleaseAudio()
     }
@@ -581,11 +688,22 @@ class MainService : Service() {
         _isReady = false
         _isAudioStart = false
 
+        // 先停止捕获
         stopCapture()
 
-        if (reuseVirtualDisplay) {
-            virtualDisplay?.release()
-            virtualDisplay = null
+        try {
+            // 如果在Android 13+上有重用的VirtualDisplay，在服务销毁时彻底释放
+            if (reuseVirtualDisplay && virtualDisplay != null) {
+                Log.d(logTag, "最终释放VirtualDisplay (Android 13+)")
+                try {
+                    virtualDisplay?.release()
+                } catch (e: Exception) {
+                    Log.e(logTag, "销毁VirtualDisplay异常: ${e.message}")
+                }
+                virtualDisplay = null
+            }
+        } catch (e: Exception) {
+            Log.e(logTag, "销毁服务时异常: ${e.message}")
         }
 
         checkMediaPermission()
@@ -781,6 +899,18 @@ class MainService : Service() {
                 return
             }
             
+            // 检查是否有旧的虚拟显示未释放
+            if (virtualDisplay != null) {
+                Log.d(logTag, "发现旧的虚拟显示，先释放以避免资源泄漏")
+                try {
+                    virtualDisplay?.release()
+                    virtualDisplay = null
+                } catch (e: Exception) {
+                    Log.e(logTag, "释放旧的虚拟显示异常: ${e.message}")
+                    virtualDisplay = null
+                }
+            }
+            
             // 使用 SurfaceFlinger 进行屏幕捕获
             Log.d(logTag, "使用 SurfaceFlinger 创建虚拟显示")
             
@@ -816,7 +946,7 @@ class MainService : Service() {
                 SCREEN_INFO.dpi,
                 surface,
                 VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                null,
+                virtualDisplayCallback,
                 null
             )
         } catch (e: Exception) {
@@ -831,6 +961,18 @@ class MainService : Service() {
             if (surface == null) {
                 Log.e(logTag, "startRawVideoRecorderWithSystemPermissions: surface is null")
                 return
+            }
+            
+            // 检查是否有旧的虚拟显示未释放
+            if (virtualDisplay != null) {
+                Log.d(logTag, "发现旧的虚拟显示，先释放以避免资源泄漏")
+                try {
+                    virtualDisplay?.release()
+                    virtualDisplay = null
+                } catch (e: Exception) {
+                    Log.e(logTag, "释放旧的虚拟显示异常: ${e.message}")
+                    virtualDisplay = null
+                }
             }
             
             // 使用系统权限创建虚拟显示
@@ -866,7 +1008,7 @@ class MainService : Service() {
                 SCREEN_INFO.dpi,
                 surface,
                 flags,
-                null,
+                virtualDisplayCallback,
                 null
             )
         } catch (e: Exception) {

@@ -218,8 +218,18 @@ class MainActivity : FlutterActivity() {
                 }
                 "start_capture" -> {
                     mainService?.let {
-                        result.success(it.startCapture())
+                        try {
+                            Log.d(logTag, "正在启动屏幕捕获")
+                            // 无需额外逻辑，MainService.startCapture已增加了检测重复启动的逻辑
+                            val success = it.startCapture()
+                            Log.d(logTag, "屏幕捕获启动${if (success) "成功" else "失败"}")
+                            result.success(success)
+                        } catch (e: Exception) {
+                            Log.e(logTag, "启动屏幕捕获异常: ${e.message}")
+                            result.success(false)
+                        }
                     } ?: let {
+                        Log.e(logTag, "mainService为空，无法启动屏幕捕获")
                         result.success(false)
                     }
                 }
