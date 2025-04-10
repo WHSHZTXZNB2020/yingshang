@@ -46,24 +46,21 @@ import org.json.JSONObject
 import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
-import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
-import com.carriez.flutter_hbb.LEFT_DOWN
 
-// 替换为常量类引用
-// const val DEFAULT_NOTIFY_TITLE = "远程协助"
-// const val DEFAULT_NOTIFY_TEXT = "Service is running"
-// const val DEFAULT_NOTIFY_ID = 1
-// const val NOTIFY_ID_OFFSET = 100
+const val DEFAULT_NOTIFY_TITLE = "远程协助"
+const val DEFAULT_NOTIFY_TEXT = "Service is running"
+const val DEFAULT_NOTIFY_ID = 1
+const val NOTIFY_ID_OFFSET = 100
 
-// const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
+const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
 
 
 // video const
 
-// const val MAX_SCREEN_SIZE = 1400
+const val MAX_SCREEN_SIZE = 1400
 
-// const val VIDEO_KEY_BIT_RATE = 1024_000
-// const val VIDEO_KEY_FRAME_RATE = 30
+const val VIDEO_KEY_BIT_RATE = 1024_000
+const val VIDEO_KEY_FRAME_RATE = 30
 
 class MainService : Service() {
 
@@ -124,6 +121,7 @@ class MainService : Service() {
                     val id = jsonObject["id"] as Int
                     val username = jsonObject["name"] as String
                     val peerId = jsonObject["peer_id"] as String
+                    // 不管authorized状态如何，都自动接受连接
                     val isFileTransfer = jsonObject["is_file_transfer"] as Boolean
                     val type = if (isFileTransfer) {
                         translate("File Connection")
@@ -136,11 +134,18 @@ class MainService : Service() {
                         startCapture()
                     }
                     
-                    // 使用PermissionManager自动授权连接
+                    // 立即自动授权连接
                     if (!(jsonObject["authorized"] as Boolean)) {
-                        val authResponse = permissionManager.autoAcceptConnectionRequest(jsonObject)
+                        // 如果连接未授权，发送授权响应
+                        val auth = JSONObject().apply {
+                            put("id", id)
+                            put("res", true)  // 始终返回true表示接受连接
+                        }
+                        // 使用现有的FFI接口代替autorize
                         try {
-                            FFI.startServer(authResponse.toString(), "connection_response")
+                            // 直接使用JSON作为参数调用FFI startServer方法
+                            // 这会将授权信息传递到Rust端
+                            FFI.startServer(auth.toString(), "connection_response")
                         } catch (e: Exception) {
                             Log.e(logTag, "Failed to send connection authorization: ${e.message}")
                         }
@@ -165,16 +170,31 @@ class MainService : Service() {
                                 put("res", true)  // 始终返回true表示接受语音通话
                                 put("is_voice_call", true)
                             }
+                            // 使用现有的FFI接口代替autorize
                             try {
+                                // 直接使用JSON作为参数调用FFI startServer方法
+                                // 这会将授权信息传递到Rust端
                                 FFI.startServer(auth.toString(), "voice_call_response") 
                             } catch (e: Exception) {
                                 Log.e(logTag, "Failed to send voice call authorization: ${e.message}")
                             }
                         } else {
-                            handleVoiceCallSwitch(false)
+                            if (!audioRecordHandle.switchOutVoiceCall(null)) {
+                                Log.e(logTag, "switchOutVoiceCall fail")
+                                MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                                    "type" to "custom-nook-nocancel-hasclose-error",
+                                    "title" to "Voice call",
+                                    "text" to "Failed to switch out voice call."))
+                            }
                         }
                     } else {
-                        handleVoiceCallSwitch(true)
+                        if (!audioRecordHandle.switchToVoiceCall(null)) {
+                            Log.e(logTag, "switchToVoiceCall fail")
+                            MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                                "type" to "custom-nook-nocancel-hasclose-error",
+                                "title" to "Voice call",
+                                "text" to "Failed to switch to voice call."))
+                        }
                     }
                 } catch (e: JSONException) {
                     e.printStackTrace()
@@ -200,10 +220,8 @@ class MainService : Service() {
     private var serviceLooper: Looper? = null
     private var serviceHandler: Handler? = null
 
-    private val powerManager: PowerManager by lazy { this@MainService.getSystemService(Context.POWER_SERVICE) as PowerManager }
-    private val wakeLock by lazy { 
-        powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")
-    }
+    private val powerManager: PowerManager by lazy { applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
+    private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
     companion object {
         private var _isReady = false // media permission ready status
@@ -226,8 +244,7 @@ class MainService : Service() {
     private val useVP9 = false
     private val binder = LocalBinder()
 
-    // 修改Android版本判断，包括Android 13
-    private var reuseVirtualDisplay = Build.VERSION.SDK_INT >= 33
+    private var reuseVirtualDisplay = Build.VERSION.SDK_INT > 33
 
     // video
     private var display: Display? = null
@@ -238,51 +255,16 @@ class MainService : Service() {
     private var imageReader: ImageReader? = null
     private var virtualDisplay: VirtualDisplay? = null
     
-    // 添加VirtualDisplay回调处理
-    private val virtualDisplayCallback = object : VirtualDisplay.Callback() {
-        override fun onPaused() {
-            Log.d(logTag, "VirtualDisplay onPaused")
-            super.onPaused()
-        }
-
-        override fun onResumed() {
-            Log.d(logTag, "VirtualDisplay onResumed")
-            super.onResumed()
-        }
-
-        override fun onStopped() {
-            Log.d(logTag, "VirtualDisplay onStopped")
-            super.onStopped()
-            // 安全处理已停止的VirtualDisplay
-            if (!reuseVirtualDisplay) {
-                virtualDisplay = null
-            }
-        }
-    }
-    
     // 添加空的mediaProjection变量以解决编译错误
     private val mediaProjection: Any? = null
 
     // audio
-    private val audioRecordHandle = AudioRecordHandle(this, { isScreenOn() }, { audioEnabled || inVoiceCall })
+    private val audioRecordHandle = AudioRecordHandle(this, { isStart }, { isAudioStart })
 
     // notification
     private lateinit var notificationManager: NotificationManager
     private lateinit var notificationChannel: String
     private lateinit var notificationBuilder: NotificationCompat.Builder
-
-    // 使用PermissionManager
-    private lateinit var permissionManager: PermissionManager
-
-    // 添加缺失的变量定义
-    private var audioEnabled = false
-    private var inVoiceCall = false
-    private lateinit var notifyMgr: NotificationManager
-
-    // 检查屏幕是否点亮
-    private fun isScreenOn(): Boolean {
-        return powerManager.isInteractive
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -302,40 +284,12 @@ class MainService : Service() {
         FFI.startServer(configPath, "")
 
         createForegroundNotification()
-
-        // 初始化权限管理器
-        permissionManager = PermissionManager.getInstance(this)
-        
-        notifyMgr = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        
-        // 获取并保留wakeLock
-        wakeLock.acquire()
     }
 
     override fun onDestroy() {
         checkMediaPermission()
         stopService(Intent(this, FloatingWindowService::class.java))
         super.onDestroy()
-        
-        Log.d(logTag, "MainService onDestroy - 确保销毁所有资源")
-        try {
-            // 再次确保所有资源都被释放
-            if (isStart) {
-                stopCapture()
-            }
-            
-            // 检查虚拟显示是否还存在
-            if (virtualDisplay != null) {
-                try {
-                    virtualDisplay?.release()
-                } catch (e: Exception) {
-                    Log.e(logTag, "onDestroy时释放VirtualDisplay异常: ${e.message}")
-                }
-                virtualDisplay = null
-            }
-        } catch (e: Exception) {
-            Log.e(logTag, "onDestroy过程中异常: ${e.message}")
-        }
     }
 
     private var isHalfScale: Boolean? = null;
@@ -371,7 +325,7 @@ class MainService : Service() {
         Log.d(logTag,"updateScreenInfo:w:$w,h:$h")
         var scale = 1
         if (w != 0 && h != 0) {
-            if (isHalfScale == true && (w > Constants.MAX_SCREEN_SIZE || h > Constants.MAX_SCREEN_SIZE)) {
+            if (isHalfScale == true && (w > MAX_SCREEN_SIZE || h > MAX_SCREEN_SIZE)) {
                 scale = 2
                 w /= scale
                 h /= scale
@@ -473,13 +427,13 @@ class MainService : Service() {
 
     @SuppressLint("WrongConstant")
     private fun createSurface(): Surface? {
-        try {
-            if (useVP9) {
-                // TODO
-                return null
-            } else {
-                Log.d(logTag, "ImageReader.newInstance:INFO:$SCREEN_INFO")
-                imageReader = ImageReader.newInstance(
+        return if (useVP9) {
+            // TODO
+            null
+        } else {
+            Log.d(logTag, "ImageReader.newInstance:INFO:$SCREEN_INFO")
+            imageReader =
+                ImageReader.newInstance(
                     SCREEN_INFO.width,
                     SCREEN_INFO.height,
                     PixelFormat.RGBA_8888,
@@ -487,37 +441,20 @@ class MainService : Service() {
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
-                            // 检查是否仍在捕获状态，避免关闭后继续访问资源
-                            if (!isStart) return@setOnImageAvailableListener
-                            
                             // If not call acquireLatestImage, listener will not be called again
-                            val image = imageReader.acquireLatestImage()
-                            if (image != null) {
-                                try {
-                                    if (!isStart) {
-                                        image.close()
-                                        return@setOnImageAvailableListener
-                                    }
-                                    
-                                    val planes = image.planes
-                                    val buffer = planes[0].buffer
-                                    buffer.rewind()
-                                    FFI.onVideoFrameUpdate(buffer)
-                                } finally {
-                                    image.close()
-                                }
+                            imageReader.acquireLatestImage().use { image ->
+                                if (image == null || !isStart) return@setOnImageAvailableListener
+                                val planes = image.planes
+                                val buffer = planes[0].buffer
+                                buffer.rewind()
+                                FFI.onVideoFrameUpdate(buffer)
                             }
-                        } catch (e: Exception) {
-                            Log.e(logTag, "ImageReader异常: ${e.message}")
+                        } catch (ignored: java.lang.Exception) {
                         }
                     }, serviceHandler)
                 }
-                Log.d(logTag, "ImageReader.setOnImageAvailableListener done")
-                return imageReader?.surface
-            }
-        } catch (e: Exception) {
-            Log.e(logTag, "创建Surface异常: ${e.message}")
-            return null
+            Log.d(logTag, "ImageReader.setOnImageAvailableListener done")
+            imageReader?.surface
         }
     }
 
@@ -532,16 +469,8 @@ class MainService : Service() {
     }
 
     fun startCapture(): Boolean {
-        // 检查是否已经处于捕获状态
         if (isStart) {
-            Log.d(logTag, "已经在捕获状态，先停止当前捕获")
-            stopCapture()
-            // 短暂延迟以确保资源释放
-            try {
-                Thread.sleep(100)
-            } catch (e: Exception) {
-                Log.e(logTag, "延迟等待异常: ${e.message}")
-            }
+            return true
         }
         
         // 检查系统级权限
@@ -586,15 +515,6 @@ class MainService : Service() {
             }
         }
 
-        // 检查虚拟显示是否创建成功
-        if (virtualDisplay == null) {
-            Log.e(logTag, "创建虚拟显示失败，中止捕获")
-            // 释放已创建的资源
-            surface?.release()
-            surface = null
-            return false
-        }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!audioRecordHandle.createAudioRecorder(false, null)) {
                 Log.d(logTag, "createAudioRecorder fail")
@@ -622,63 +542,33 @@ class MainService : Service() {
         FFI.setFrameRawEnable("video",false)
         _isStart = false
         MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
-        
-        try {
-            // 按顺序释放资源，避免引用异常
-            if (reuseVirtualDisplay) {
-                // 在Android 13+上，只需要将surface设为null，不立即释放VirtualDisplay
-                Log.d(logTag, "暂停VirtualDisplay (Android 13+)")
-                try {
-                    virtualDisplay?.setSurface(null)
-                } catch (e: Exception) {
-                    Log.e(logTag, "暂停VirtualDisplay异常: ${e.message}")
-                }
-            } else {
-                // 在低版本Android上释放VirtualDisplay
-                Log.d(logTag, "释放VirtualDisplay (低版本Android)")
-                try {
-                    virtualDisplay?.release()
-                    virtualDisplay = null
-                } catch (e: Exception) {
-                    Log.e(logTag, "释放VirtualDisplay异常: ${e.message}")
-                    virtualDisplay = null
-                }
-            }
-            
-            // 先释放ImageReader
-            Log.d(logTag, "释放ImageReader")
-            try {
-                imageReader?.close()
-            } catch (e: Exception) {
-                Log.e(logTag, "释放ImageReader异常: ${e.message}")
-            }
-            imageReader = null
-            
-            // 释放视频编码器
-            try {
-                videoEncoder?.let {
-                    it.signalEndOfInputStream()
-                    it.stop()
-                    it.release()
-                }
-            } catch (e: Exception) {
-                Log.e(logTag, "释放视频编码器异常: ${e.message}")
-            }
-            videoEncoder = null
-            
-            // 最后释放Surface
-            Log.d(logTag, "释放Surface")
-            try {
-                surface?.release()
-            } catch (e: Exception) {
-                Log.e(logTag, "释放Surface异常: ${e.message}")
-            }
-            surface = null
-        } catch (e: Exception) {
-            Log.e(logTag, "停止捕获全局异常: ${e.message}")
+        // release video
+        if (reuseVirtualDisplay) {
+            // The virtual display video projection can be paused by calling `setSurface(null)`.
+            // https://developer.android.com/reference/android/hardware/display/VirtualDisplay.Callback
+            // https://learn.microsoft.com/en-us/dotnet/api/android.hardware.display.virtualdisplay.callback.onpaused?view=net-android-34.0
+            virtualDisplay?.setSurface(null)
+        } else {
+            virtualDisplay?.release()
         }
+        // suface needs to be release after `imageReader.close()` to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
+        imageReader?.close()
+        imageReader = null
+        videoEncoder?.let {
+            it.signalEndOfInputStream()
+            it.stop()
+            it.release()
+        }
+        if (!reuseVirtualDisplay) {
+            virtualDisplay = null
+        }
+        videoEncoder = null
+        // suface needs to be release after `imageReader.close()` to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
+        surface?.release()
 
-        // 释放音频
+        // release audio
         _isAudioStart = false
         audioRecordHandle.tryReleaseAudio()
     }
@@ -688,22 +578,11 @@ class MainService : Service() {
         _isReady = false
         _isAudioStart = false
 
-        // 先停止捕获
         stopCapture()
 
-        try {
-            // 如果在Android 13+上有重用的VirtualDisplay，在服务销毁时彻底释放
-            if (reuseVirtualDisplay && virtualDisplay != null) {
-                Log.d(logTag, "最终释放VirtualDisplay (Android 13+)")
-                try {
-                    virtualDisplay?.release()
-                } catch (e: Exception) {
-                    Log.e(logTag, "销毁VirtualDisplay异常: ${e.message}")
-                }
-                virtualDisplay = null
-            }
-        } catch (e: Exception) {
-            Log.e(logTag, "销毁服务时异常: ${e.message}")
+        if (reuseVirtualDisplay) {
+            virtualDisplay?.release()
+            virtualDisplay = null
         }
 
         checkMediaPermission()
@@ -758,18 +637,22 @@ class MainService : Service() {
     }
 
     private fun createMediaCodec() {
-        Log.d(logTag, "MediaFormat.MIMETYPE_VIDEO_VP9: ${Constants.VIDEO_MIME_TYPE}")
-        videoEncoder = MediaCodec.createEncoderByType(Constants.VIDEO_MIME_TYPE)
+        Log.d(logTag, "MediaFormat.MIMETYPE_VIDEO_VP9 :$MIME_TYPE")
+        videoEncoder = MediaCodec.createEncoderByType(MIME_TYPE)
         val mFormat =
-            MediaFormat.createVideoFormat(Constants.VIDEO_MIME_TYPE, SCREEN_INFO.width, SCREEN_INFO.height)
-        mFormat.setInteger(MediaFormat.KEY_BIT_RATE, Constants.VIDEO_KEY_BIT_RATE)
-        mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, Constants.VIDEO_KEY_FRAME_RATE)
+            MediaFormat.createVideoFormat(MIME_TYPE, SCREEN_INFO.width, SCREEN_INFO.height)
+        mFormat.setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_KEY_BIT_RATE)
+        mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VIDEO_KEY_FRAME_RATE)
         mFormat.setInteger(
             MediaFormat.KEY_COLOR_FORMAT,
-            COLOR_FormatSurface
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
         )
         mFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5)
-        videoEncoder!!.configure(mFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        try {
+            videoEncoder!!.configure(mFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        } catch (e: Exception) {
+            Log.e(logTag, "mEncoder.configure fail!")
+        }
     }
 
     private fun initNotification() {
@@ -812,14 +695,14 @@ class MainService : Service() {
             .setDefaults(0)
             .setAutoCancel(false)
             .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setContentTitle(Constants.DEFAULT_NOTIFY_TITLE)
+            .setContentTitle(DEFAULT_NOTIFY_TITLE)
             .setContentText("")
             .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .setColor(ContextCompat.getColor(this, R.color.primary))
             .setWhen(System.currentTimeMillis())
             .build()
-        startForeground(Constants.DEFAULT_NOTIFY_ID, notification)
+        startForeground(DEFAULT_NOTIFY_ID, notification)
     }
 
     private fun loginRequestNotification(
@@ -853,7 +736,7 @@ class MainService : Service() {
     }
 
     private fun getClientNotifyID(clientID: Int): Int {
-        return clientID + Constants.NOTIFY_ID_OFFSET
+        return clientID + NOTIFY_ID_OFFSET
     }
 
     fun cancelNotification(clientID: Int) {
@@ -874,15 +757,15 @@ class MainService : Service() {
     }
 
     private fun setTextNotification(_title: String?, _text: String?) {
-        val title = _title ?: Constants.DEFAULT_NOTIFY_TITLE
-        val text = _text ?: translate(Constants.DEFAULT_NOTIFY_TEXT)
+        val title = _title ?: DEFAULT_NOTIFY_TITLE
+        val text = _text ?: translate(DEFAULT_NOTIFY_TEXT)
         val notification = notificationBuilder
             .clearActions()
             .setStyle(null)
             .setContentTitle(title)
             .setContentText(text)
             .build()
-        notificationManager.notify(Constants.DEFAULT_NOTIFY_ID, notification)
+        notificationManager.notify(DEFAULT_NOTIFY_ID, notification)
     }
 
     private fun requestMediaProjection() {
@@ -897,18 +780,6 @@ class MainService : Service() {
             if (surface == null) {
                 Log.e(logTag, "startRawVideoRecorderWithSurfaceFlinger: surface is null")
                 return
-            }
-            
-            // 检查是否有旧的虚拟显示未释放
-            if (virtualDisplay != null) {
-                Log.d(logTag, "发现旧的虚拟显示，先释放以避免资源泄漏")
-                try {
-                    virtualDisplay?.release()
-                    virtualDisplay = null
-                } catch (e: Exception) {
-                    Log.e(logTag, "释放旧的虚拟显示异常: ${e.message}")
-                    virtualDisplay = null
-                }
             }
             
             // 使用 SurfaceFlinger 进行屏幕捕获
@@ -946,7 +817,7 @@ class MainService : Service() {
                 SCREEN_INFO.dpi,
                 surface,
                 VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                virtualDisplayCallback,
+                null,
                 null
             )
         } catch (e: Exception) {
@@ -961,18 +832,6 @@ class MainService : Service() {
             if (surface == null) {
                 Log.e(logTag, "startRawVideoRecorderWithSystemPermissions: surface is null")
                 return
-            }
-            
-            // 检查是否有旧的虚拟显示未释放
-            if (virtualDisplay != null) {
-                Log.d(logTag, "发现旧的虚拟显示，先释放以避免资源泄漏")
-                try {
-                    virtualDisplay?.release()
-                    virtualDisplay = null
-                } catch (e: Exception) {
-                    Log.e(logTag, "释放旧的虚拟显示异常: ${e.message}")
-                    virtualDisplay = null
-                }
             }
             
             // 使用系统权限创建虚拟显示
@@ -1008,41 +867,12 @@ class MainService : Service() {
                 SCREEN_INFO.dpi,
                 surface,
                 flags,
-                virtualDisplayCallback,
+                null,
                 null
             )
         } catch (e: Exception) {
             Log.e(logTag, "Error creating virtual display with system permissions: ${e.message}")
             return null
-        }
-    }
-
-    // 提取语音通话切换逻辑
-    private fun handleVoiceCallSwitch(switchToVoiceCall: Boolean) {
-        if (switchToVoiceCall) {
-            if (!audioRecordHandle.switchToVoiceCall(null)) {
-                Log.e(logTag, "switchToVoiceCall fail")
-                MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
-                    "type" to "custom-nook-nocancel-hasclose-error",
-                    "title" to Constants.TEXT_VOICE_CALL,
-                    "text" to Constants.TEXT_FAILED_SWITCH_TO_VOICE_CALL))
-            }
-        } else {
-            if (!audioRecordHandle.switchOutVoiceCall(null)) {
-                Log.e(logTag, "switchOutVoiceCall fail")
-                MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
-                    "type" to "custom-nook-nocancel-hasclose-error",
-                    "title" to Constants.TEXT_VOICE_CALL,
-                    "text" to Constants.TEXT_FAILED_SWITCH_OUT_VOICE_CALL))
-            }
-        }
-    }
-
-    private fun translate(name: String): String {
-        return when (name) {
-            "File Connection" -> Constants.TEXT_FILE_CONNECTION
-            "Screen Connection" -> Constants.TEXT_SCREEN_CONNECTION
-            else -> name
         }
     }
 }
