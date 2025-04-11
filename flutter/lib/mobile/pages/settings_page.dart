@@ -36,7 +36,7 @@ class SettingsPage extends StatefulWidget implements PageShape {
   State<SettingsPage> createState() => _SettingsState();
 }
 
-const url = 'http://www.scysdl.com/';
+const url = '';
 
 enum KeepScreenOn {
   never,
@@ -627,19 +627,17 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           title: Text(translate("About")),
           tiles: [
             SettingsTile(
-  onPressed: (context) async {
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
-    }
-  },
-  title: Text(translate("版本: ") + version),
-  value: Padding(
-    padding: EdgeInsets.symmetric(vertical: 8),
-    child: Text('远程控制定制联系微信"Haisong-8"',
-        style: TextStyle()), // 移除了下划线样式
-  ),
-  leading: Icon(Icons.info),
-),
+              onPressed: (context) async {
+                // 不执行任何跳转操作
+              },
+              title: Text(translate("版本: ") + version),
+              value: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('远程控制定制联系微信"Haisong-8"',
+                    style: TextStyle()), // 移除了下划线样式
+              ),
+              leading: Icon(Icons.info),
+            ),
           ],
         ),
       ],
@@ -752,11 +750,8 @@ void showAbout(OverlayDialogManager dialogManager) {
         children: [
           Text('Version: $version'), // 显示当前应用版本号
           InkWell( // 可点击的文字
-            onTap: () async { // 当用户点击时触发的动作
-              const url = 'http://www.scysdl.com/'; // 目标URL
-              if (await canLaunchUrl(Uri.parse(url))) { // 检查是否能够打开URL
-                await launchUrl(Uri.parse(url)); // 打开URL
-              }
+            onTap: () async { 
+              // 不执行任何跳转操作
             },
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
