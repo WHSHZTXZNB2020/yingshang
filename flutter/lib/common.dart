@@ -560,11 +560,13 @@ class MyTheme {
   );
 
   static ThemeMode getThemeModePreference() {
-    // 默认使用深色主题，忽略保存的设置
-    return ThemeMode.dark;
-    
-    // 原始代码 - 被注释
-    // return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
+    final savedTheme = bind.mainGetLocalOption(key: kCommConfKeyTheme);
+    // 如果没有保存过主题设置或者设置为空，则默认返回暗黑主题
+    if (savedTheme == null || savedTheme.isEmpty) {
+      return ThemeMode.dark;
+    }
+    // 否则返回保存的主题设置
+    return themeModeFromString(savedTheme);
   }
 
   static Future<void> changeDarkMode(ThemeMode mode) async {
@@ -3391,24 +3393,8 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
 }
 
 Widget loadPowered(BuildContext context) {
-  return MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      onTap: () {
-        launchUrl(Uri.parse('https://rustdesk.com'));
-      },
-      child: Opacity(
-          opacity: 0.5,
-          child: Text(
-            translate("powered_by_me"),
-            overflow: TextOverflow.clip,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
-          )),
-    ),
-  ).marginOnly(top: 6);
+  // 返回空容器，完全删除"由远程控制提供支持"的文本和链接
+  return SizedBox.shrink();
 }
 
 // max 300 x 60
