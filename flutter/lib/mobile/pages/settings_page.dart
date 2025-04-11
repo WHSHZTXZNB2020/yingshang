@@ -614,7 +614,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             title: Text(translate("Share Screen")),
             tiles: shareScreenTiles,
           ),
-        if (!bind.isIncomingOnly()) defaultDisplaySection(),
         if (isAndroid &&
             !disabledSettings &&
             !outgoingOnly &&
@@ -654,23 +653,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       return false;
     }
     return true;
-  }
-
-  defaultDisplaySection() {
-    return SettingsSection(
-      title: Text(translate("Display Settings")),
-      tiles: [
-        SettingsTile(
-            title: Text(translate('Display Settings')),
-            leading: Icon(Icons.desktop_windows_outlined),
-            trailing: Icon(Icons.arrow_forward_ios),
-            onPressed: (context) {
-              Navigator.push(context, MaterialPageRoute(builder: (context) {
-                return _DisplayPage();
-              }));
-            })
-      ],
-    );
   }
 }
 
@@ -781,120 +763,6 @@ class ScanButton extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _DisplayPage extends StatefulWidget {
-  const _DisplayPage();
-
-  @override
-  State<_DisplayPage> createState() => __DisplayPageState();
-}
-
-class __DisplayPageState extends State<_DisplayPage> {
-  @override
-  Widget build(BuildContext context) {
-    final Map codecsJson = jsonDecode(bind.mainSupportedHwdecodings());
-    final h264 = codecsJson['h264'] ?? false;
-    final h265 = codecsJson['h265'] ?? false;
-    var codecList = [
-      _RadioEntry('Auto', 'auto'),
-      _RadioEntry('VP8', 'vp8'),
-      _RadioEntry('VP9', 'vp9'),
-      _RadioEntry('AV1', 'av1'),
-      if (h264) _RadioEntry('H264', 'h264'),
-      if (h265) _RadioEntry('H265', 'h265')
-    ];
-    RxBool showCustomImageQuality = false.obs;
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: Icon(Icons.arrow_back_ios)),
-        title: Text(translate('Display Settings')),
-        centerTitle: true,
-      ),
-      body: SettingsList(sections: [
-        SettingsSection(
-          tiles: [
-            _getPopupDialogRadioEntry(
-              title: 'Default View Style',
-              list: [
-                _RadioEntry('Scale original', kRemoteViewStyleOriginal),
-                _RadioEntry('Scale adaptive', kRemoteViewStyleAdaptive)
-              ],
-              getter: () =>
-                  bind.mainGetUserDefaultOption(key: kOptionViewStyle),
-              asyncSetter: isOptionFixed(kOptionViewStyle)
-                  ? null
-                  : (value) async {
-                      await bind.mainSetUserDefaultOption(
-                          key: kOptionViewStyle, value: value);
-                    },
-            ),
-            _getPopupDialogRadioEntry(
-              title: 'Default Image Quality',
-              list: [
-                _RadioEntry('Good image quality', kRemoteImageQualityBest),
-                _RadioEntry('Balanced', kRemoteImageQualityBalanced),
-                _RadioEntry('Optimize reaction time', kRemoteImageQualityLow),
-                _RadioEntry('Custom', kRemoteImageQualityCustom),
-              ],
-              getter: () {
-                final v =
-                    bind.mainGetUserDefaultOption(key: kOptionImageQuality);
-                showCustomImageQuality.value = v == kRemoteImageQualityCustom;
-                return v;
-              },
-              asyncSetter: isOptionFixed(kOptionImageQuality)
-                  ? null
-                  : (value) async {
-                      await bind.mainSetUserDefaultOption(
-                          key: kOptionImageQuality, value: value);
-                      showCustomImageQuality.value =
-                          value == kRemoteImageQualityCustom;
-                    },
-              tail: customImageQualitySetting(),
-              showTail: showCustomImageQuality,
-              notCloseValue: kRemoteImageQualityCustom,
-            ),
-            _getPopupDialogRadioEntry(
-              title: 'Default Codec',
-              list: codecList,
-              getter: () =>
-                  bind.mainGetUserDefaultOption(key: kOptionCodecPreference),
-              asyncSetter: isOptionFixed(kOptionCodecPreference)
-                  ? null
-                  : (value) async {
-                      await bind.mainSetUserDefaultOption(
-                          key: kOptionCodecPreference, value: value);
-                    },
-            ),
-          ],
-        ),
-        SettingsSection(
-          title: Text(translate('Other Default Options')),
-          tiles:
-              otherDefaultSettings().map((e) => otherRow(e.$1, e.$2)).toList(),
-        ),
-      ]),
-    );
-  }
-
-  SettingsTile otherRow(String label, String key) {
-    final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
-    final isOptFixed = isOptionFixed(key);
-    return SettingsTile.switchTile(
-      initialValue: value,
-      title: Text(translate(label)),
-      onToggle: isOptFixed
-          ? null
-          : (b) async {
-              await bind.mainSetUserDefaultOption(
-                  key: key, value: b ? 'Y' : defaultOptionNo);
-              setState(() {});
-            },
     );
   }
 }
